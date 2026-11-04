@@ -1,11 +1,4 @@
-// src/types/auth.ts
-
-export interface UserInfo {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
-}
+import type { UserInfo } from '../../../types/user';
 
 export interface AuthResponse {
     accessToken: string;
