@@ -1,4 +1,5 @@
 import React from 'react';
+import { getInitials } from '../../utils/user';
 
 interface AvatarProps {
     name: string;
@@ -12,13 +13,7 @@ const sizeClasses = {
 };
 
 export const Avatar: React.FC<AvatarProps> = ({name, size = 'md',}) => {
-    const initials = name
-        .trim()
-        .split(/[\s@._-]+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join('');
+    const initials = getInitials(name);
 
     return (
         <div

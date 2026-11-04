@@ -4,9 +4,19 @@ import {useAuth} from '../../auth/context/AuthContext';
 import {HomeHeader} from '../components/HomeHeader';
 import {MatchmakingPanel} from '../../matchmaking/components/MatchmakingPanel';
 import {getDisplayName} from '../../../utils/user';
+import {useMatchmaking} from '../../matchmaking/hooks/useMatchmaking';
 
 export const HomePage: React.FC = () => {
-    const {user, logout} = useAuth();
+    const {user, logout, accessToken} = useAuth();
+
+    const {
+        status,
+        match,
+        error,
+        findMatch,
+        cancelMatch,
+        resetMatch,
+    } = useMatchmaking(accessToken);
 
     const displayName = getDisplayName(user);
 
@@ -31,7 +41,14 @@ export const HomePage: React.FC = () => {
                 </section>
 
                 <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-                    <MatchmakingPanel/>
+                    <MatchmakingPanel
+                        status={status}
+                        match={match}
+                        error={error}
+                        onFindMatch={findMatch}
+                        onCancelMatch={cancelMatch}
+                        onResetMatch={resetMatch}
+                    />
 
                     <aside className="flex flex-col gap-4">
                         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
