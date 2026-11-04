@@ -1,4 +1,5 @@
-import React from 'react';
+import {React, useEffect} from 'react';
+import {useNavigate} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
 import {HomeHeader} from '../components/HomeHeader';
@@ -8,6 +9,8 @@ import {useMatchmaking} from '../../matchmaking/hooks/useMatchmaking';
 
 export const HomePage: React.FC = () => {
     const {user, logout, accessToken} = useAuth();
+
+    const navigate = useNavigate();
 
     const {
         status,
@@ -19,6 +22,14 @@ export const HomePage: React.FC = () => {
     } = useMatchmaking(accessToken);
 
     const displayName = getDisplayName(user);
+
+    useEffect(() => {
+        if (status === 'MATCHED' && match?.gameId) {
+            navigate(`/game/${match.gameId}`, {
+                replace: true,
+            });
+        }
+    }, [status, match, navigate]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-white">
