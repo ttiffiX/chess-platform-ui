@@ -1,107 +1,107 @@
 import React, {
     createContext,
     useContext,
-    useState,
     useEffect,
+    useRef,
+    useState,
     useCallback,
 } from 'react';
 
 import type {AuthContextType, AuthResponse} from '../types/auth';
 import type {UserInfo} from '../../../types/user';
 import type {ApiResponse} from '../../../types/api';
+
 import {
     client,
     setApiAccessToken,
 } from '../../../api/client';
 
+interface AuthSession {
+    accessToken: string;
+    user: UserInfo;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USER_INFO_KEY = 'user_info';
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}) => {
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-
-    const [user, setUser] = useState<UserInfo | null>(() => {
-        const saved = localStorage.getItem(USER_INFO_KEY);
-
-        if (!saved) return null;
-
-        try {
-            return JSON.parse(saved) as UserInfo;
-        } catch {
-            localStorage.removeItem(USER_INFO_KEY);
-            return null;
-        }
-    });
-
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children,}) => {
+    const [session, setSession] = useState<AuthSession | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const loginSuccess = useCallback((data: AuthResponse) => {
-        setAccessToken(data.accessToken);
-        setApiAccessToken(data.accessToken);
-        setUser(data.userInfo);
-        localStorage.setItem(USER_INFO_KEY, JSON.stringify(data.userInfo));
-    }, []);
+    // Đảm bảo bootstrap chỉ chạy một lần, kể cả React StrictMode.
+    const bootstrapStartedRef = useRef(false);
 
-    const clearAuth = useCallback(() => {
-        setAccessToken(null);
+    const clearSession = useCallback(() => {
         setApiAccessToken(null);
-        setUser(null);
-        localStorage.removeItem(USER_INFO_KEY);
+        setSession(null);
     }, []);
 
-    const checkAuthOnBoot = useCallback(async (): Promise<boolean> => {
-        try {
-            const response = await client.post<ApiResponse<AuthResponse>>('/auth/refresh');
-            if (response.data?.success && response.data?.data) {
-                loginSuccess(response.data.data);
-                return true;
-            }
-            clearAuth();
-            return false;
-        } catch {
-            clearAuth();
-            return false;
-        }
-    }, [loginSuccess, clearAuth]);
-
+    // Khôi phục session khi ứng dụng khởi động.
     useEffect(() => {
-        const init = async () => {
-            await checkAuthOnBoot();
-            setIsLoading(false);
-        };
-        init();
-    }, [checkAuthOnBoot]);
+        if (bootstrapStartedRef.current) {
+            return;
+        }
 
-    const logout = async () => {
+        bootstrapStartedRef.current = true;
+
+        const restoreSession = async () => {
+            try {
+                const response = await client.post<ApiResponse<AuthResponse>>(
+                    '/auth/refresh',
+                );
+
+                const authData = response.data?.data;
+
+                if (
+                    !response.data?.success ||
+                    !authData?.accessToken ||
+                    !authData?.userInfo
+                ) {
+                    clearSession();
+                    return;
+                }
+
+                setApiAccessToken(authData.accessToken);
+
+                setSession({
+                    accessToken: authData.accessToken,
+                    user: authData.userInfo,
+                });
+            } catch {
+                clearSession();
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void restoreSession();
+    }, [clearSession]);
+
+    const logout = useCallback(async () => {
         try {
             await client.post('/auth/logout');
         } catch {
-            // Bỏ qua lỗi mạng khi logout
+            // Vẫn phải xóa session phía frontend nếu request thất bại.
         } finally {
-            clearAuth();
-            window.location.href = '/login';
+            clearSession();
+            window.location.replace('/login');
         }
-    };
+    }, [clearSession]);
 
+    const value: AuthContextType = {
+        accessToken: session?.accessToken ?? null,
+        user: session?.user ?? null,
+        isAuthenticated: session !== null,
+        isLoading,
+        logout,
+    };
     return (
-        <AuthContext.Provider
-            value={{
-                accessToken,
-                user,
-                isAuthenticated: !!accessToken,
-                isLoading,
-                loginSuccess,
-                logout,
-                checkAuthOnBoot,
-            }}
-        >
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext);
     if (!context) {
         throw new Error('useAuth must be used within an AuthProvider');
