@@ -9,7 +9,10 @@ import React, {
 import type {AuthContextType, AuthResponse} from '../types/auth';
 import type {UserInfo} from '../../../types/user';
 import type {ApiResponse} from '../../../types/api';
-import {client} from '../../../api/client';
+import {
+    client,
+    setApiAccessToken,
+} from '../../../api/client';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -35,12 +38,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}
 
     const loginSuccess = useCallback((data: AuthResponse) => {
         setAccessToken(data.accessToken);
+        setApiAccessToken(data.accessToken);
         setUser(data.userInfo);
         localStorage.setItem(USER_INFO_KEY, JSON.stringify(data.userInfo));
     }, []);
 
     const clearAuth = useCallback(() => {
         setAccessToken(null);
+        setApiAccessToken(null);
         setUser(null);
         localStorage.removeItem(USER_INFO_KEY);
     }, []);
