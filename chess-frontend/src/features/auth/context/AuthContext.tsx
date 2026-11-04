@@ -1,24 +1,37 @@
-// src/context/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { AuthContextType, AuthResponse, UserInfo } from '../types/auth';
-import type { ApiResponse } from '../types/api';
-import { client } from '../api/client';
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useEffect,
+    useCallback,
+} from 'react';
+
+import type {AuthContextType, AuthResponse} from '../types/auth';
+import type {UserInfo} from '../../../types/user';
+import type {ApiResponse} from '../../../types/api';
+import {client} from '../../../api/client';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USER_INFO_KEY = 'user_info';
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // Access Token chỉ lưu trong State (RAM)
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}) => {
     const [accessToken, setAccessToken] = useState<string | null>(null);
 
-    // Thông tin cơ bản lưu ở localStorage
     const [user, setUser] = useState<UserInfo | null>(() => {
         const saved = localStorage.getItem(USER_INFO_KEY);
-        return saved ? JSON.parse(saved) : null;
+
+        if (!saved) return null;
+
+        try {
+            return JSON.parse(saved) as UserInfo;
+        } catch {
+            localStorage.removeItem(USER_INFO_KEY);
+            return null;
+        }
     });
 
-    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isLoading, setIsLoading] = useState(true);
 
     const loginSuccess = useCallback((data: AuthResponse) => {
         setAccessToken(data.accessToken);
@@ -32,7 +45,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem(USER_INFO_KEY);
     }, []);
 
-    // Gọi API /api/auth/refresh để lấy ACT thông qua HttpOnly Cookie chứa RFT
     const checkAuthOnBoot = useCallback(async (): Promise<boolean> => {
         try {
             const response = await client.post<ApiResponse<AuthResponse>>('/auth/refresh');

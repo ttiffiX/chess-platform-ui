@@ -1,6 +1,6 @@
 import React from 'react';
 import { GoogleLoginButton } from '../components/GoogleLoginButton';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
     const { isAuthenticated, user, logout } = useAuth();
@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
                     <div className="space-y-4 text-center">
                         <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600 text-left">
                             <p className="text-green-400 font-medium">Login successful</p>
-                            <p className="text-slate-300 text-sm mt-1"><strong>User ID:</strong> {user?.userId}</p>
+                            <p className="text-slate-300 text-sm mt-1"><strong>User ID:</strong> {user?.id}</p>
                             <p className="text-slate-300 text-sm"><strong>Email:</strong> {user?.email}</p>
                             <p className="text-slate-300 text-sm"><strong>Role:</strong> {user?.role}</p>
                         </div>

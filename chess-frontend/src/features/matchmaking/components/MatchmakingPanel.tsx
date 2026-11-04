@@ -1,48 +1,25 @@
+import React, {useState} from 'react';
 
-import React, { useState } from 'react';
+import {TIME_CONTROLS, DEFAULT_TIME_CONTROL} from '../constants/timeControls';
+import type {MatchmakingPreset} from '../types/matchmaking';
 
-type TimeControl = {
-    id: string;
-    label: string;
-    description: string;
-    baseTimeSeconds: number;
-    incrementSeconds: number;
-};
+interface MatchmakingPanelProps {
+    onFindMatch?: (preset: MatchmakingPreset) => void;
+}
 
-const TIME_CONTROLS: TimeControl[] = [
-    {
-        id: 'blitz',
-        label: '3 + 2',
-        description: 'Blitz',
-        baseTimeSeconds: 180,
-        incrementSeconds: 2,
-    },
-    {
-        id: 'rapid',
-        label: '10 + 0',
-        description: 'Rapid',
-        baseTimeSeconds: 600,
-        incrementSeconds: 0,
-    },
-    {
-        id: 'classical',
-        label: '15 + 10',
-        description: 'Classical',
-        baseTimeSeconds: 900,
-        incrementSeconds: 10,
-    },
-];
+export const MatchmakingPanel: React.FC<MatchmakingPanelProps> = ({onFindMatch,}) => {
+    const [selectedPreset, setSelectedPreset] =
+        useState<MatchmakingPreset>(DEFAULT_TIME_CONTROL);
 
-export const MatchmakingPanel: React.FC = () => {
-    const [selectedTimeControl, setSelectedTimeControl] =
-        useState<string>(TIME_CONTROLS[1].id);
+    const handleFindMatch = () => {
+        onFindMatch?.(selectedPreset);
+    };
 
     return (
         <section
             id="matchmaking"
             className="scroll-mt-24 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl shadow-black/10 sm:p-7"
         >
-            {/* Heading */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
@@ -58,13 +35,13 @@ export const MatchmakingPanel: React.FC = () => {
                     </p>
                 </div>
 
-                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-xs font-medium text-emerald-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                <span
+                    className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-xs font-medium text-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300"/>
                     Online matchmaking
                 </span>
             </div>
 
-            {/* Time control */}
             <div className="mt-7">
                 <div className="mb-3 flex items-center justify-between">
                     <label className="text-sm font-semibold text-slate-200">
@@ -78,17 +55,14 @@ export const MatchmakingPanel: React.FC = () => {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {TIME_CONTROLS.map((timeControl) => {
-                        const isSelected =
-                            selectedTimeControl === timeControl.id;
+                        const isSelected = selectedPreset === timeControl.id;
 
                         return (
                             <button
                                 key={timeControl.id}
                                 type="button"
                                 aria-pressed={isSelected}
-                                onClick={() =>
-                                    setSelectedTimeControl(timeControl.id)
-                                }
+                                onClick={() => setSelectedPreset(timeControl.id)}
                                 className={`rounded-xl border p-4 text-left transition-all ${
                                     isSelected
                                         ? 'border-emerald-300/70 bg-emerald-300/10 ring-1 ring-emerald-300/20'
@@ -114,26 +88,29 @@ export const MatchmakingPanel: React.FC = () => {
                 </div>
             </div>
 
-            {/* Action */}
-            <div className="mt-6 flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div
+                className="mt-6 flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-slate-500">
                     More time controls can be added as matchmaking options expand.
                 </p>
 
                 <button
                     type="button"
-                    disabled
-                    title="Matchmaking will be connected to the backend in the next step"
-                    className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 opacity-50"
+                    disabled={!onFindMatch}
+                    onClick={handleFindMatch}
+                    title={!onFindMatch ? 'Matchmaking is not connected yet' : undefined}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     Find an opponent
                     <span aria-hidden="true">→</span>
                 </button>
             </div>
 
-            <p className="mt-2 text-right text-xs text-slate-600">
-                Matchmaking connection is the next implementation step.
-            </p>
+            {!onFindMatch && (
+                <p className="mt-2 text-right text-xs text-slate-600">
+                    Matchmaking connection is the next implementation step.
+                </p>
+            )}
         </section>
     );
 };

@@ -4,7 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { OAuth2RedirectHandler } from '../features/auth/pages/OAuth2RedirectHandler';
 import { HomePage } from '../features/home/pages/HomePage';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../features/auth/context/AuthContext';
 
 // Component bảo vệ Route yêu cầu đăng nhập
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {

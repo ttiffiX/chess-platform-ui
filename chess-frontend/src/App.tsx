@@ -1,5 +1,5 @@
 import {BrowserRouter} from 'react-router-dom';
-import {AuthProvider} from './context/AuthContext';
+import {AuthProvider} from './features/auth/context/AuthContext';
 import {AppRoutes} from './routes/AppRoutes';
 import {ToastProvider} from './context/ToastContext';
 

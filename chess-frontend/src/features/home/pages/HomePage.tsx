@@ -1,22 +1,20 @@
-
 import React from 'react';
-import { useAuth } from '../../../context/AuthContext';
-import { HomeHeader } from '../components/HomeHeader';
-import { MatchmakingPanel } from '../components/MatchmakingPanel';
+
+import {useAuth} from '../../auth/context/AuthContext';
+import {HomeHeader} from '../components/HomeHeader';
+import {MatchmakingPanel} from '../../matchmaking/components/MatchmakingPanel';
+import {getDisplayName} from '../../../utils/user';
 
 export const HomePage: React.FC = () => {
-    const { user } = useAuth();
+    const {user, logout} = useAuth();
 
-    const displayName =
-        user?.name || user?.email?.split('@')[0] || 'Player';
+    const displayName = getDisplayName(user);
 
     return (
         <div className="min-h-screen bg-slate-950 text-white">
-            <HomeHeader />
+            <HomeHeader user={user} onLogout={logout}/>
 
             <main className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14">
-
-                {/* Welcome */}
                 <section className="mb-8 sm:mb-10">
                     <p className="text-sm font-medium text-emerald-300">
                         Welcome back
@@ -32,16 +30,14 @@ export const HomePage: React.FC = () => {
                     </p>
                 </section>
 
-                {/* Main content */}
                 <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <MatchmakingPanel/>
 
-                    <MatchmakingPanel />
-
-                    {/* Account information */}
                     <aside className="flex flex-col gap-4">
                         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
                             <div className="flex items-center gap-3">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-xl">
+                                <span
+                                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-xl">
                                     ♟
                                 </span>
 
@@ -57,17 +53,13 @@ export const HomePage: React.FC = () => {
                             </div>
 
                             <div className="mt-5 border-t border-slate-800 pt-4">
-                                <p className="text-xs text-slate-500">
-                                    Player
-                                </p>
+                                <p className="text-xs text-slate-500">Player</p>
 
                                 <p className="mt-1 break-all text-sm font-medium text-slate-200">
-                                    {user?.name || 'Chess player'}
+                                    {displayName}
                                 </p>
 
-                                <p className="mt-3 text-xs text-slate-500">
-                                    Email
-                                </p>
+                                <p className="mt-3 text-xs text-slate-500">Email</p>
 
                                 <p className="mt-1 break-all text-sm text-slate-300">
                                     {user?.email || '—'}
@@ -75,7 +67,8 @@ export const HomePage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-emerald-400/10 to-slate-900 p-5">
+                        <div
+                            className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-emerald-400/10 to-slate-900 p-5">
                             <p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
                                 Keep improving
                             </p>

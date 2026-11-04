@@ -1,7 +1,7 @@
 // src/features/auth/components/OAuth2RedirectHandler.tsx
 import React, { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 
 export const OAuth2RedirectHandler: React.FC = () => {
