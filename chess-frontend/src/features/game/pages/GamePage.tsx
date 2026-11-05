@@ -3,40 +3,20 @@ import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
 import {getGame} from '../services/gameApi';
+
 import {ChessBoard} from '../components/ChessBoard';
+import {GamePlayerCard} from '../components/GamePlayerCard';
+import {MoveHistoryPanel} from '../components/MoveHistoryPanel';
+
+import {
+    getMaterialAdvantage,
+    getPiecesCapturedBy,
+} from '../utils/materialScore';
 
 import type {
     GameStateResponse,
     PieceColor,
 } from '../types/game';
-
-const getGameStatusLabel = (status: string): string => {
-    const labels: Record<string, string> = {
-        IN_PROGRESS: 'In progress',
-        CHECKMATE: 'Checkmate',
-        STALEMATE: 'Stalemate',
-        DRAW_INSUFFICIENT_MATERIAL: 'Draw - insufficient material',
-        DRAW_FIFTY_MOVE_RULE: 'Draw - fifty-move rule',
-        DRAW_THREEFOLD_REPETITION: 'Draw - threefold repetition',
-        DRAW_BY_AGREEMENT: 'Draw by agreement',
-        RESIGNED: 'Resigned',
-        TIMED_OUT: 'Time out',
-    };
-
-    return labels[status] ?? status;
-};
-
-const formatTime = (milliseconds: number | null): string => {
-    if (milliseconds === null) {
-        return 'No clock';
-    }
-
-    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-};
 
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
@@ -106,6 +86,7 @@ export const GamePage: React.FC = () => {
                 <div className="text-center">
                     <div
                         className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-300"/>
+
                     <p className="mt-4 text-sm text-slate-400">
                         Loading game...
                     </p>
@@ -137,6 +118,7 @@ export const GamePage: React.FC = () => {
         );
     }
 
+    // Resolve player colors
     const playerColor: PieceColor | null =
         user?.id === game.whitePlayerId
             ? 'WHITE'
@@ -151,6 +133,7 @@ export const GamePage: React.FC = () => {
                 ? 'WHITE'
                 : null;
 
+    // Resolve clocks
     const playerRemainingMs =
         playerColor === 'WHITE'
             ? game.whiteRemainingMs
@@ -165,28 +148,67 @@ export const GamePage: React.FC = () => {
                 ? game.blackRemainingMs
                 : null;
 
-    const opponentId =
-        opponentColor === 'WHITE'
-            ? game.whitePlayerId
-            : opponentColor === 'BLACK'
-                ? game.blackPlayerId
-                : null;
+    // Resolve captured pieces
+    const playerCapturedPieces = getPiecesCapturedBy(
+        playerColor,
+        game.capturedWhitePieces,
+        game.capturedBlackPieces,
+    );
 
+    const opponentCapturedPieces = getPiecesCapturedBy(
+        opponentColor,
+        game.capturedWhitePieces,
+        game.capturedBlackPieces,
+    );
+
+    // Resolve material advantage
+    const playerMaterialAdvantage = getMaterialAdvantage(
+        playerColor,
+        game.capturedWhitePieces,
+        game.capturedBlackPieces,
+    );
+
+    const opponentMaterialAdvantage = getMaterialAdvantage(
+        opponentColor,
+        game.capturedWhitePieces,
+        game.capturedBlackPieces,
+    );
+
+    // Active turn
+    const isGameInProgress =
+        game.gameResult.status === 'IN_PROGRESS';
+
+    const isPlayerTurn =
+        isGameInProgress &&
+        playerColor !== null &&
+        game.currentTurn === playerColor;
+
+    const isOpponentTurn =
+        isGameInProgress &&
+        opponentColor !== null &&
+        game.currentTurn === opponentColor;
 
     return (
-        <main
-            className="min-h-dvh bg-slate-950 px-3 py-3 text-white sm:px-6 min-[951px]:h-dvh min-[951px]:overflow-hidden">
-            <div
-                className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1600px] flex-col min-[951px]:h-full min-[951px]:min-h-0">
-
+        <main className="
+            min-h-dvh bg-slate-950
+            px-3 py-2 text-white sm:px-6 sm:py-3
+            min-[951px]:h-dvh
+            min-[951px]:overflow-hidden
+        ">
+            <div className="
+                mx-auto flex min-h-[calc(100dvh-1rem)]
+                max-w-[1600px] flex-col
+                min-[951px]:h-full
+                min-[951px]:min-h-0
+            ">
                 {/* Header */}
-                <header className="mb-3 flex shrink-0 items-center justify-between">
+                <header className="mb-2 flex shrink-0 items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">
                             Chess game
                         </p>
 
-                        <h1 className="mt-1 text-2xl font-bold">
+                        <h1 className="mt-1 text-xl font-bold sm:text-2xl">
                             Game room
                         </h1>
                     </div>
@@ -199,165 +221,87 @@ export const GamePage: React.FC = () => {
                     </Link>
                 </header>
 
-                {/* Theater layout */}
-                <section
-                    className="
-        mx-auto grid w-full min-w-0 gap-3
+                {/* Main game layout */}
+                <section className="
+                    mx-auto grid w-full
+                    max-w-[min(100%,820px,calc(100dvh_-_330px))]
+                    grid-cols-1 gap-2
 
-        min-[640px]:grid-cols-[132px_minmax(0,1fr)]
-
-        min-[951px]:max-w-[1204px]
-        min-[951px]:min-h-0
-        min-[951px]:flex-1
-        min-[951px]:gap-4
-        min-[951px]:grid-cols-[132px_minmax(0,1fr)_220px]
-        min-[951px]:grid-rows-[minmax(0,1fr)]
-    "
-                >
-                    {/* Player panels - left side */}
-                    <div className="
-                    grid grid-cols-2 gap-2
-                    min-[640px]:flex
-                    min-[640px]:flex-col
-                    min-[640px]:justify-center
-                    min-[640px]:gap-3
+                    min-[951px]:max-w-[1440px]
+                    min-[951px]:min-h-0
+                    min-[951px]:flex-1
+                    min-[951px]:grid-cols-[200px_minmax(0,1fr)_minmax(300px,340px)]
+                    min-[951px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]
+                    min-[951px]:gap-3
                 ">
-
-                        {/* Opponent */}
-                        <div
-                            className={`
-                            min-w-0 rounded-xl border px-3 py-3
-                            transition-colors
-                            ${
-                                opponentColor !== null &&
-                                game.currentTurn === opponentColor
-                                    ? 'border-emerald-400/70 bg-emerald-400/10'
-                                    : 'border-slate-800 bg-slate-900'
-                            }
-                        `}
-                        >
-                            <div className="flex min-w-0 items-center justify-between gap-1">
-                                <div className="min-w-0">
-                                    <p className="truncate text-sm font-semibold">
-                                        Opponent
-                                    </p>
-
-                                    <p className="text-xs text-slate-400">
-                                        {opponentColor ?? 'Unknown'}
-                                    </p>
-                                </div>
-
-                                <p className="shrink-0 font-mono text-lg font-bold tabular-nums">
-                                    {formatTime(opponentRemainingMs)}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Current player */}
-                        <div
-                            className={`
-                            min-w-0 rounded-xl border px-3 py-3
-                            transition-colors
-                            ${
-                                playerColor !== null &&
-                                game.currentTurn === playerColor
-                                    ? 'border-emerald-400/70 bg-emerald-400/10'
-                                    : 'border-slate-800 bg-slate-900'
-                            }
-                        `}
-                        >
-                            <div className="flex min-w-0 items-center justify-between gap-1">
-                                <div className="min-w-0">
-                                    <p className="truncate text-sm font-semibold">
-                                        {user?.name || 'You'}
-                                    </p>
-
-                                    <p className="text-xs text-slate-400">
-                                        {playerColor ?? 'Unknown'}
-                                    </p>
-                                </div>
-
-                                <p className="shrink-0 font-mono text-lg font-bold tabular-nums">
-                                    {formatTime(playerRemainingMs)}
-                                </p>
-                            </div>
-                        </div>
+                    {/* Opponent */}
+                    <div className="
+                        min-w-0
+                        min-[951px]:col-start-1
+                        min-[951px]:row-start-1
+                        min-[951px]:self-end
+                    ">
+                        <GamePlayerCard
+                            name="Opponent"
+                            color={opponentColor}
+                            remainingMs={opponentRemainingMs}
+                            isActive={isOpponentTurn}
+                            isCurrentPlayer={false}
+                            capturedPieces={opponentCapturedPieces}
+                            materialAdvantage={opponentMaterialAdvantage}
+                        />
                     </div>
 
-                    {/* Chess board - center */}
+                    {/* Chess board */}
                     <div className="
-                    flex min-w-0 justify-center
-                    min-[640px]:min-h-0
-                    min-[640px]:items-center
-                    min-[951px]:overflow-hidden
-                ">
+                        flex min-w-0 justify-center
+                        min-[951px]:col-start-2
+                        min-[951px]:row-start-1
+                        min-[951px]:row-span-2
+                        min-[951px]:min-h-0
+                        min-[951px]:items-center
+                        min-[951px]:overflow-hidden
+                    ">
                         <ChessBoard
                             game={game}
                             playerColor={playerColor}
                         />
                     </div>
 
-                    {/* Move history - right on desktop, below on smaller screens */}
-                    <aside
-                        className="
-                        min-w-0 rounded-2xl border border-slate-800
-                        bg-slate-900 p-4
-                        min-[640px]:col-span-2
-                        min-[951px]:col-span-1
-                        min-[951px]:flex
+                    {/* Current player */}
+                    <div className="
+                        min-w-0
+                        min-[951px]:col-start-1
+                        min-[951px]:row-start-2
+                        min-[951px]:self-start
+                    ">
+                        <GamePlayerCard
+                            name={user?.name || 'You'}
+                            color={playerColor}
+                            remainingMs={playerRemainingMs}
+                            isActive={isPlayerTurn}
+                            isCurrentPlayer
+                            capturedPieces={playerCapturedPieces}
+                            materialAdvantage={playerMaterialAdvantage}
+                        />
+                    </div>
+
+                    {/* Move history */}
+                    <div className="
+                        min-w-0
+                        min-[951px]:col-start-3
+                        min-[951px]:row-start-1
+                        min-[951px]:row-span-2
                         min-[951px]:min-h-0
-                        min-[951px]:flex-col
-                    "
-                    >
-                        <div className="flex shrink-0 items-center justify-between gap-3">
-                            <h2 className="font-semibold">
-                                Move history
-                            </h2>
-
-                            <span className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
-                            Move {game.fullMoveNumber}
-                        </span>
-                        </div>
-
-                        {game.drawOfferedBy && (
-                            <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
-                                {game.drawOfferedBy} has offered a draw.
-                            </p>
-                        )}
-
-                        {game.historyItems.length === 0 ? (
-                            <p className="mt-4 text-sm text-slate-500">
-                                No moves have been made yet.
-                            </p>
-                        ) : (
-                            <div
-                                className="
-                                mt-3 space-y-2
-                                min-[951px]:min-h-0
-                                min-[951px]:flex-1
-                                min-[951px]:overflow-y-auto
-                                min-[951px]:pr-1
-                            "
-                            >
-                                {game.historyItems.map((move) => (
-                                    <div
-                                        key={move.moveIndex}
-                                        className="flex items-center justify-between rounded-lg bg-slate-950 px-3 py-2 text-sm"
-                                    >
-                                    <span className="text-slate-500">
-                                        Move {move.moveIndex}
-                                    </span>
-
-                                        <span className="font-mono text-slate-200">
-                                        {move.from} → {move.to}
-                                    </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </aside>
+                    ">
+                        <MoveHistoryPanel
+                            historyItems={game.historyItems}
+                            fullMoveNumber={game.fullMoveNumber}
+                            drawOfferedBy={game.drawOfferedBy}
+                        />
+                    </div>
                 </section>
             </div>
         </main>
     );
-}
+};
