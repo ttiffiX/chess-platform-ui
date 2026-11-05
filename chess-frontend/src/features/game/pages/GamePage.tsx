@@ -3,7 +3,7 @@ import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
 import {getGame} from '../services/gameApi';
-
+import {AppHeader} from '../../../components/layout/AppHeader';
 import {ChessBoard} from '../components/ChessBoard';
 import {GamePlayerCard} from '../components/GamePlayerCard';
 import {MoveHistoryPanel} from '../components/MoveHistoryPanel';
@@ -37,7 +37,7 @@ const getErrorMessage = (error: unknown): string => {
 
 export const GamePage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
-    const {user} = useAuth();
+    const {user, logout} = useAuth();
 
     const [game, setGame] = useState<GameStateResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -82,39 +82,65 @@ export const GamePage: React.FC = () => {
 
     if (isLoading) {
         return (
-            <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
-                <div className="text-center">
-                    <div
-                        className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-300"/>
+            <div className="min-h-dvh bg-slate-950 text-white">
+                <AppHeader user={user} onLogout={logout}/>
 
-                    <p className="mt-4 text-sm text-slate-400">
-                        Loading game...
-                    </p>
-                </div>
-            </main>
+                <main className="
+                flex min-h-[calc(100dvh-4rem)]
+                items-center justify-center
+            ">
+                    <div className="text-center">
+                        <div className="
+                        mx-auto h-8 w-8 animate-spin
+                        rounded-full border-2 border-slate-600
+                        border-t-emerald-300
+                    "/>
+
+                        <p className="mt-4 text-sm text-slate-400">
+                            Loading game...
+                        </p>
+                    </div>
+                </main>
+            </div>
         );
     }
 
     if (error || !game) {
         return (
-            <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
-                <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
-                    <h1 className="text-xl font-bold">
-                        Unable to open game
-                    </h1>
+            <div className="min-h-dvh bg-slate-950 text-white">
+                <AppHeader user={user} onLogout={logout}/>
 
-                    <p className="mt-3 text-sm text-red-300">
-                        {error || 'Game data is unavailable.'}
-                    </p>
+                <main className="
+                flex min-h-[calc(100dvh-4rem)]
+                items-center justify-center px-4
+            ">
+                    <div className="
+                    w-full max-w-md rounded-2xl
+                    border border-slate-800
+                    bg-slate-900 p-6 text-center
+                ">
+                        <h1 className="text-xl font-bold">
+                            Unable to open game
+                        </h1>
 
-                    <Link
-                        to="/home"
-                        className="mt-6 inline-flex rounded-xl bg-emerald-300 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-200"
-                    >
-                        Back to home
-                    </Link>
-                </div>
-            </main>
+                        <p className="mt-3 text-sm text-red-300">
+                            {error || 'Game data is unavailable.'}
+                        </p>
+
+                        <Link
+                            to="/home"
+                            className="
+                            mt-6 inline-flex rounded-xl
+                            bg-emerald-300 px-5 py-2.5
+                            text-sm font-bold text-slate-950
+                            hover:bg-emerald-200
+                        "
+                        >
+                            Back to home
+                        </Link>
+                    </div>
+                </main>
+            </div>
         );
     }
 
@@ -189,40 +215,31 @@ export const GamePage: React.FC = () => {
         game.currentTurn === opponentColor;
 
     return (
-        <main className="
-            min-h-dvh bg-slate-950
-            px-3 py-2 text-white sm:px-6 sm:py-3
-            min-[951px]:h-dvh
+        <div className="
+        min-h-dvh bg-slate-950 text-white
+        min-[951px]:h-dvh min-[951px]:overflow-hidden
+    ">
+            <AppHeader
+                user={user}
+                onLogout={logout}
+            />
+
+            <main className="
+            min-h-[calc(100dvh-4rem)]
+            px-3 py-2 sm:px-6 sm:py-3
+            min-[951px]:h-[calc(100dvh-4rem)]
+            min-[951px]:min-h-0
             min-[951px]:overflow-hidden
         ">
-            <div className="
-                mx-auto flex min-h-[calc(100dvh-1rem)]
+                <div className="
+                mx-auto flex min-h-[calc(100dvh-5rem)]
                 max-w-[1600px] flex-col
                 min-[951px]:h-full
                 min-[951px]:min-h-0
             ">
-                {/* Header */}
-                <header className="mb-2 flex shrink-0 items-center justify-between">
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">
-                            Chess game
-                        </p>
 
-                        <h1 className="mt-1 text-xl font-bold sm:text-2xl">
-                            Game room
-                        </h1>
-                    </div>
-
-                    <Link
-                        to="/home"
-                        className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
-                    >
-                        Home
-                    </Link>
-                </header>
-
-                {/* Main game layout */}
-                <section className="
+                    {/* Main game layout */}
+                    <section className="
                     mx-auto grid w-full
                     max-w-[min(100%,820px,calc(100dvh_-_330px))]
                     grid-cols-1 gap-2
@@ -234,26 +251,26 @@ export const GamePage: React.FC = () => {
                     min-[951px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]
                     min-[951px]:gap-3
                 ">
-                    {/* Opponent */}
-                    <div className="
+                        {/* Opponent */}
+                        <div className="
                         min-w-0
                         min-[951px]:col-start-1
                         min-[951px]:row-start-1
                         min-[951px]:self-end
                     ">
-                        <GamePlayerCard
-                            name="Opponent"
-                            color={opponentColor}
-                            remainingMs={opponentRemainingMs}
-                            isActive={isOpponentTurn}
-                            isCurrentPlayer={false}
-                            capturedPieces={opponentCapturedPieces}
-                            materialAdvantage={opponentMaterialAdvantage}
-                        />
-                    </div>
+                            <GamePlayerCard
+                                name="Opponent"
+                                color={opponentColor}
+                                remainingMs={opponentRemainingMs}
+                                isActive={isOpponentTurn}
+                                isCurrentPlayer={false}
+                                capturedPieces={opponentCapturedPieces}
+                                materialAdvantage={opponentMaterialAdvantage}
+                            />
+                        </div>
 
-                    {/* Chess board */}
-                    <div className="
+                        {/* Chess board */}
+                        <div className="
                         flex min-w-0 justify-center
                         min-[951px]:col-start-2
                         min-[951px]:row-start-1
@@ -262,46 +279,47 @@ export const GamePage: React.FC = () => {
                         min-[951px]:items-center
                         min-[951px]:overflow-hidden
                     ">
-                        <ChessBoard
-                            game={game}
-                            playerColor={playerColor}
-                        />
-                    </div>
+                            <ChessBoard
+                                game={game}
+                                playerColor={playerColor}
+                            />
+                        </div>
 
-                    {/* Current player */}
-                    <div className="
+                        {/* Current player */}
+                        <div className="
                         min-w-0
                         min-[951px]:col-start-1
                         min-[951px]:row-start-2
                         min-[951px]:self-start
                     ">
-                        <GamePlayerCard
-                            name={user?.name || 'You'}
-                            color={playerColor}
-                            remainingMs={playerRemainingMs}
-                            isActive={isPlayerTurn}
-                            isCurrentPlayer
-                            capturedPieces={playerCapturedPieces}
-                            materialAdvantage={playerMaterialAdvantage}
-                        />
-                    </div>
+                            <GamePlayerCard
+                                name={user?.name || 'You'}
+                                color={playerColor}
+                                remainingMs={playerRemainingMs}
+                                isActive={isPlayerTurn}
+                                isCurrentPlayer
+                                capturedPieces={playerCapturedPieces}
+                                materialAdvantage={playerMaterialAdvantage}
+                            />
+                        </div>
 
-                    {/* Move history */}
-                    <div className="
+                        {/* Move history */}
+                        <div className="
                         min-w-0
                         min-[951px]:col-start-3
                         min-[951px]:row-start-1
                         min-[951px]:row-span-2
                         min-[951px]:min-h-0
                     ">
-                        <MoveHistoryPanel
-                            historyItems={game.historyItems}
-                            fullMoveNumber={game.fullMoveNumber}
-                            drawOfferedBy={game.drawOfferedBy}
-                        />
-                    </div>
-                </section>
-            </div>
-        </main>
+                            <MoveHistoryPanel
+                                historyItems={game.historyItems}
+                                fullMoveNumber={game.fullMoveNumber}
+                                drawOfferedBy={game.drawOfferedBy}
+                            />
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
     );
 };

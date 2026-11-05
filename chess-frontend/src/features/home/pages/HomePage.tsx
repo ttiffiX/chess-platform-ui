@@ -2,7 +2,7 @@ import {React, useEffect} from 'react';
 import {useNavigate} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
-import {HomeHeader} from '../components/HomeHeader';
+import {AppHeader} from '../../../components/layout/AppHeader';
 import {MatchmakingPanel} from '../../matchmaking/components/MatchmakingPanel';
 import {getDisplayName} from '../../../utils/user';
 import {useMatchmaking} from '../../matchmaking/hooks/useMatchmaking';
@@ -33,7 +33,7 @@ export const HomePage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-950 text-white">
-            <HomeHeader user={user} onLogout={logout}/>
+            <AppHeader user={user} onLogout={logout}/>
 
             <main className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14">
                 <section className="mb-8 sm:mb-10">
