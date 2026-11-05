@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Link, useParams} from 'react-router-dom';
 
-import { useAuth } from '../../auth/context/AuthContext';
-import { getGame } from '../services/gameApi';
+import {useAuth} from '../../auth/context/AuthContext';
+import {getGame} from '../services/gameApi';
+import {ChessBoard} from '../components/ChessBoard';
 
 import type {
     GameStateResponse,
@@ -55,8 +56,8 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export const GamePage: React.FC = () => {
-    const { gameId } = useParams<{ gameId: string }>();
-    const { user } = useAuth();
+    const {gameId} = useParams<{ gameId: string }>();
+    const {user} = useAuth();
 
     const [game, setGame] = useState<GameStateResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +104,8 @@ export const GamePage: React.FC = () => {
         return (
             <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
                 <div className="text-center">
-                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-300" />
+                    <div
+                        className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-300"/>
                     <p className="mt-4 text-sm text-slate-400">
                         Loading game...
                     </p>
@@ -171,15 +173,17 @@ export const GamePage: React.FC = () => {
                 : null;
 
     return (
-        <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
-            <div className="mx-auto max-w-6xl">
-                <header className="mb-8 flex items-center justify-between">
+        <main className="min-h-dvh bg-slate-950 px-4 py-3 text-white sm:px-6 min-[951px]:h-dvh min-[951px]:overflow-hidden">
+            <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-7xl flex-col min-[951px]:h-full min-[951px]:min-h-0">
+
+                {/* Header */}
+                <header className="mb-3 flex shrink-0 items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">
                             Chess game
                         </p>
 
-                        <h1 className="mt-2 text-2xl font-bold sm:text-3xl">
+                        <h1 className="mt-1 text-2xl font-bold">
                             Game room
                         </h1>
                     </div>
@@ -192,123 +196,148 @@ export const GamePage: React.FC = () => {
                     </Link>
                 </header>
 
-                <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-semibold">
-                                Game information
-                            </h2>
+                {/* Main game layout */}
+                <section
+                    className="
+                    grid gap-4
+                    min-[951px]:min-h-0
+                    min-[951px]:flex-1
+                    min-[951px]:grid-cols-[minmax(0,1fr)_300px]
+                    min-[951px]:grid-rows-[minmax(0,1fr)]
+                "
+                >
+                    {/* Chess area */}
+                    <div className="flex min-w-0 flex-col gap-2 min-[951px]:min-h-0">
 
-                            <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
-                                {getGameStatusLabel(game.gameResult.status)}
-                            </span>
-                        </div>
-
-                        <div className="mt-6 grid grid-cols-2 gap-4">
-                            <div className="rounded-xl bg-slate-950 p-4">
-                                <p className="text-xs text-slate-500">
-                                    Your color
+                        {/* Opponent */}
+                        <div
+                            className={`
+                            flex min-h-[52px] shrink-0 items-center justify-between
+                            rounded-xl border px-4 py-2 transition-colors
+                            ${
+                                opponentColor !== null &&
+                                game.currentTurn === opponentColor
+                                    ? 'border-emerald-400/70 bg-emerald-400/10'
+                                    : 'border-slate-800 bg-slate-900'
+                            }
+                        `}
+                        >
+                            <div>
+                                <p className="font-semibold">
+                                    Opponent
                                 </p>
-                                <p className="mt-2 text-lg font-bold">
-                                    {playerColor ?? 'Unknown'}
+
+                                <p className="text-xs text-slate-400">
+                                    {opponentColor ?? 'Unknown'}
                                 </p>
                             </div>
 
-                            <div className="rounded-xl bg-slate-950 p-4">
+                            <div className="text-right">
                                 <p className="text-xs text-slate-500">
-                                    Current turn
+                                    Clock
                                 </p>
-                                <p className="mt-2 text-lg font-bold">
-                                    {game.currentTurn}
-                                </p>
-                            </div>
 
-                            <div className="rounded-xl bg-slate-950 p-4">
-                                <p className="text-xs text-slate-500">
-                                    Your clock
-                                </p>
-                                <p className="mt-2 text-lg font-bold tabular-nums">
-                                    {formatTime(playerRemainingMs)}
-                                </p>
-                            </div>
-
-                            <div className="rounded-xl bg-slate-950 p-4">
-                                <p className="text-xs text-slate-500">
-                                    Opponent clock
-                                </p>
-                                <p className="mt-2 text-lg font-bold tabular-nums">
+                                <p className="font-mono text-xl font-bold tabular-nums">
                                     {formatTime(opponentRemainingMs)}
                                 </p>
                             </div>
                         </div>
 
-                        <div className="mt-6 border-t border-slate-800 pt-5">
-                            <p className="text-xs text-slate-500">
-                                Game ID
-                            </p>
-                            <p className="mt-1 break-all font-mono text-sm text-slate-300">
-                                {game.gameId}
-                            </p>
+                        {/* Chess board */}
+                        <div className="flex min-w-0 justify-center min-[951px]:min-h-0 min-[951px]:flex-1 min-[951px]:items-center">
+                            <ChessBoard
+                                game={game}
+                                playerColor={playerColor}
+                            />
+                        </div>
 
-                            <p className="mt-4 text-xs text-slate-500">
-                                Opponent ID
-                            </p>
-                            <p className="mt-1 break-all text-sm text-slate-300">
-                                {opponentId ?? 'Unknown'}
-                            </p>
+                        {/* Current player */}
+                        <div
+                            className={`
+                            flex min-h-[52px] shrink-0 items-center justify-between
+                            rounded-xl border px-4 py-2 transition-colors
+                            ${
+                                playerColor !== null &&
+                                game.currentTurn === playerColor
+                                    ? 'border-emerald-400/70 bg-emerald-400/10'
+                                    : 'border-slate-800 bg-slate-900'
+                            }
+                        `}
+                        >
+                            <div>
+                                <p className="font-semibold">
+                                    {user?.name || 'You'}
+                                </p>
 
-                            <p className="mt-4 text-xs text-slate-500">
-                                Full move number
-                            </p>
-                            <p className="mt-1 text-sm text-slate-300">
-                                {game.fullMoveNumber}
-                            </p>
+                                <p className="text-xs text-slate-400">
+                                    {playerColor ?? 'Unknown'}
+                                </p>
+                            </div>
 
-                            <p className="mt-4 text-xs text-slate-500">
-                                Pieces on board
-                            </p>
-                            <p className="mt-1 text-sm text-slate-300">
-                                {Object.keys(game.board).length}
-                            </p>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500">
+                                    Clock
+                                </p>
+
+                                <p className="font-mono text-xl font-bold tabular-nums">
+                                    {formatTime(playerRemainingMs)}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    <aside className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
-                        <h2 className="font-semibold">
-                            Recent moves
-                        </h2>
+                    {/* Move history */}
+                    <aside
+                        className="
+                        min-w-0 rounded-2xl border border-slate-800
+                        bg-slate-900 p-4
+                        min-[951px]:flex min-[951px]:min-h-0
+                        min-[951px]:flex-col
+                    "
+                    >
+                        <div className="flex shrink-0 items-center justify-between gap-3">
+                            <h2 className="font-semibold">
+                                Move history
+                            </h2>
+
+                            <span className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
+                            Move {game.fullMoveNumber}
+                        </span>
+                        </div>
 
                         {game.historyItems.length === 0 ? (
-                            <p className="mt-5 text-sm text-slate-500">
+                            <p className="mt-4 text-sm text-slate-500">
                                 No moves have been made yet.
                             </p>
                         ) : (
-                            <div className="mt-4 space-y-2">
-                                {game.historyItems.slice(-10).map((move) => (
+                            <div
+                                className="
+                                mt-3 space-y-2
+                                min-[951px]:min-h-0
+                                min-[951px]:flex-1
+                                min-[951px]:overflow-y-auto
+                                min-[951px]:pr-1
+                            "
+                            >
+                                {game.historyItems.map((move) => (
                                     <div
                                         key={move.moveIndex}
                                         className="flex items-center justify-between rounded-lg bg-slate-950 px-3 py-2 text-sm"
                                     >
-                                        <span className="text-slate-500">
-                                            Move {move.moveIndex}
-                                        </span>
+                                    <span className="text-slate-500">
+                                        Move {move.moveIndex}
+                                    </span>
 
                                         <span className="font-mono text-slate-200">
-                                            {move.from} → {move.to}
-                                        </span>
+                                        {move.from} → {move.to}
+                                    </span>
                                     </div>
                                 ))}
                             </div>
-                        )}
-
-                        {game.inCheck && (
-                            <p className="mt-5 rounded-lg bg-red-400/10 px-3 py-2 text-sm text-red-300">
-                                Check!
-                            </p>
                         )}
                     </aside>
                 </section>
             </div>
         </main>
     );
-};
+}
