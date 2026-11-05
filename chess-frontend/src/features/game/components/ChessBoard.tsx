@@ -117,7 +117,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
             <div
                 className="
                 mx-auto aspect-square w-full
-                max-w-[min(680px,calc(100dvh_-_264px))]
+                max-w-[min(820px,calc(100dvh_-_150px))]
             "
             >
                 <div

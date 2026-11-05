@@ -172,9 +172,12 @@ export const GamePage: React.FC = () => {
                 ? game.blackPlayerId
                 : null;
 
+
     return (
-        <main className="min-h-dvh bg-slate-950 px-4 py-3 text-white sm:px-6 min-[951px]:h-dvh min-[951px]:overflow-hidden">
-            <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-7xl flex-col min-[951px]:h-full min-[951px]:min-h-0">
+        <main
+            className="min-h-dvh bg-slate-950 px-3 py-3 text-white sm:px-6 min-[951px]:h-dvh min-[951px]:overflow-hidden">
+            <div
+                className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-[1600px] flex-col min-[951px]:h-full min-[951px]:min-h-0">
 
                 {/* Header */}
                 <header className="mb-3 flex shrink-0 items-center justify-between">
@@ -196,24 +199,35 @@ export const GamePage: React.FC = () => {
                     </Link>
                 </header>
 
-                {/* Main game layout */}
+                {/* Theater layout */}
                 <section
                     className="
-                    grid gap-4
-                    min-[951px]:min-h-0
-                    min-[951px]:flex-1
-                    min-[951px]:grid-cols-[minmax(0,1fr)_300px]
-                    min-[951px]:grid-rows-[minmax(0,1fr)]
-                "
+        mx-auto grid w-full min-w-0 gap-3
+
+        min-[640px]:grid-cols-[132px_minmax(0,1fr)]
+
+        min-[951px]:max-w-[1204px]
+        min-[951px]:min-h-0
+        min-[951px]:flex-1
+        min-[951px]:gap-4
+        min-[951px]:grid-cols-[132px_minmax(0,1fr)_220px]
+        min-[951px]:grid-rows-[minmax(0,1fr)]
+    "
                 >
-                    {/* Chess area */}
-                    <div className="flex min-w-0 flex-col gap-2 min-[951px]:min-h-0">
+                    {/* Player panels - left side */}
+                    <div className="
+                    grid grid-cols-2 gap-2
+                    min-[640px]:flex
+                    min-[640px]:flex-col
+                    min-[640px]:justify-center
+                    min-[640px]:gap-3
+                ">
 
                         {/* Opponent */}
                         <div
                             className={`
-                            flex min-h-[52px] shrink-0 items-center justify-between
-                            rounded-xl border px-4 py-2 transition-colors
+                            min-w-0 rounded-xl border px-3 py-3
+                            transition-colors
                             ${
                                 opponentColor !== null &&
                                 game.currentTurn === opponentColor
@@ -222,40 +236,28 @@ export const GamePage: React.FC = () => {
                             }
                         `}
                         >
-                            <div>
-                                <p className="font-semibold">
-                                    Opponent
-                                </p>
+                            <div className="flex min-w-0 items-center justify-between gap-1">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">
+                                        Opponent
+                                    </p>
 
-                                <p className="text-xs text-slate-400">
-                                    {opponentColor ?? 'Unknown'}
-                                </p>
-                            </div>
+                                    <p className="text-xs text-slate-400">
+                                        {opponentColor ?? 'Unknown'}
+                                    </p>
+                                </div>
 
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500">
-                                    Clock
-                                </p>
-
-                                <p className="font-mono text-xl font-bold tabular-nums">
+                                <p className="shrink-0 font-mono text-lg font-bold tabular-nums">
                                     {formatTime(opponentRemainingMs)}
                                 </p>
                             </div>
                         </div>
 
-                        {/* Chess board */}
-                        <div className="flex min-w-0 justify-center min-[951px]:min-h-0 min-[951px]:flex-1 min-[951px]:items-center">
-                            <ChessBoard
-                                game={game}
-                                playerColor={playerColor}
-                            />
-                        </div>
-
                         {/* Current player */}
                         <div
                             className={`
-                            flex min-h-[52px] shrink-0 items-center justify-between
-                            rounded-xl border px-4 py-2 transition-colors
+                            min-w-0 rounded-xl border px-3 py-3
+                            transition-colors
                             ${
                                 playerColor !== null &&
                                 game.currentTurn === playerColor
@@ -264,34 +266,46 @@ export const GamePage: React.FC = () => {
                             }
                         `}
                         >
-                            <div>
-                                <p className="font-semibold">
-                                    {user?.name || 'You'}
-                                </p>
+                            <div className="flex min-w-0 items-center justify-between gap-1">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">
+                                        {user?.name || 'You'}
+                                    </p>
 
-                                <p className="text-xs text-slate-400">
-                                    {playerColor ?? 'Unknown'}
-                                </p>
-                            </div>
+                                    <p className="text-xs text-slate-400">
+                                        {playerColor ?? 'Unknown'}
+                                    </p>
+                                </div>
 
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500">
-                                    Clock
-                                </p>
-
-                                <p className="font-mono text-xl font-bold tabular-nums">
+                                <p className="shrink-0 font-mono text-lg font-bold tabular-nums">
                                     {formatTime(playerRemainingMs)}
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Move history */}
+                    {/* Chess board - center */}
+                    <div className="
+                    flex min-w-0 justify-center
+                    min-[640px]:min-h-0
+                    min-[640px]:items-center
+                    min-[951px]:overflow-hidden
+                ">
+                        <ChessBoard
+                            game={game}
+                            playerColor={playerColor}
+                        />
+                    </div>
+
+                    {/* Move history - right on desktop, below on smaller screens */}
                     <aside
                         className="
                         min-w-0 rounded-2xl border border-slate-800
                         bg-slate-900 p-4
-                        min-[951px]:flex min-[951px]:min-h-0
+                        min-[640px]:col-span-2
+                        min-[951px]:col-span-1
+                        min-[951px]:flex
+                        min-[951px]:min-h-0
                         min-[951px]:flex-col
                     "
                     >
@@ -304,6 +318,12 @@ export const GamePage: React.FC = () => {
                             Move {game.fullMoveNumber}
                         </span>
                         </div>
+
+                        {game.drawOfferedBy && (
+                            <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
+                                {game.drawOfferedBy} has offered a draw.
+                            </p>
+                        )}
 
                         {game.historyItems.length === 0 ? (
                             <p className="mt-4 text-sm text-slate-500">
