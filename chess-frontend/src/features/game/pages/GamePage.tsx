@@ -7,6 +7,7 @@ import {AppHeader} from '../../../components/layout/AppHeader';
 import {ChessBoard} from '../components/ChessBoard';
 import {GamePlayerCard} from '../components/GamePlayerCard';
 import {MoveHistoryPanel} from '../components/MoveHistoryPanel';
+import {GameClock} from '../components/GameClock';
 
 import {
     getMaterialAdvantage,
@@ -239,78 +240,125 @@ export const GamePage: React.FC = () => {
             ">
 
                     {/* Main game layout */}
-                    <section className="
-                    mx-auto grid w-full
-                    max-w-[min(100%,820px,calc(100dvh_-_330px))]
-                    grid-cols-1 gap-2
 
-                    min-[951px]:max-w-[1440px]
-                    min-[951px]:min-h-0
-                    min-[951px]:flex-1
-                    min-[951px]:grid-cols-[200px_minmax(0,1fr)_minmax(300px,340px)]
-                    min-[951px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]
-                    min-[951px]:gap-3
-                ">
-                        {/* Opponent */}
+
+                    <section className="
+    mx-auto grid w-full
+    max-w-[min(100%,820px,calc(100dvh_-_330px))]
+    grid-cols-1 gap-2
+
+    min-[951px]:max-w-[1440px]
+    min-[951px]:min-h-0
+    min-[951px]:flex-1
+    min-[951px]:grid-cols-[200px_minmax(0,1fr)_minmax(300px,340px)]
+    min-[951px]:grid-rows-[minmax(0,1fr)]
+    min-[951px]:gap-3
+">
+                        {/* MOBILE: Opponent - luôn nằm trên bàn cờ */}
                         <div className="
-                        min-w-0
-                        min-[951px]:col-start-1
-                        min-[951px]:row-start-1
-                        min-[951px]:self-end
-                    ">
+        flex h-10 w-full min-w-0 items-center gap-2
+        min-[951px]:hidden
+    ">
                             <GamePlayerCard
                                 name="Opponent"
-                                color={opponentColor}
-                                remainingMs={opponentRemainingMs}
-                                isActive={isOpponentTurn}
-                                isCurrentPlayer={false}
                                 capturedPieces={opponentCapturedPieces}
                                 materialAdvantage={opponentMaterialAdvantage}
+                                className="flex-1"
+                            />
+
+                            <GameClock
+                                remainingMs={opponentRemainingMs}
+                                isActive={isOpponentTurn}
+                                variant="compact"
+                            />
+                        </div>
+
+                        {/* DESKTOP: Toàn bộ player column nằm bên trái */}
+                        <div className="
+        hidden min-w-0
+        min-[951px]:col-start-1
+        min-[951px]:row-start-1
+        min-[951px]:flex
+        min-[951px]:h-full
+        min-[951px]:min-h-0
+        min-[951px]:flex-col
+        min-[951px]:items-stretch
+        min-[951px]:py-2
+    ">
+                            {/* Opponent information */}
+                            <GamePlayerCard
+                                name="Opponent"
+                                capturedPieces={opponentCapturedPieces}
+                                materialAdvantage={opponentMaterialAdvantage}
+                            />
+
+                            {/* Both clocks occupy the space between players */}
+                            <div className="
+            flex min-h-0 flex-1
+            flex-col items-center justify-center gap-3
+        ">
+                                <GameClock
+                                    remainingMs={opponentRemainingMs}
+                                    isActive={isOpponentTurn}
+                                    variant="panel"
+                                />
+
+                                <GameClock
+                                    remainingMs={playerRemainingMs}
+                                    isActive={isPlayerTurn}
+                                    variant="panel"
+                                />
+                            </div>
+
+                            {/* Current player information */}
+                            <GamePlayerCard
+                                name={user?.name || 'You'}
+                                capturedPieces={playerCapturedPieces}
+                                materialAdvantage={playerMaterialAdvantage}
                             />
                         </div>
 
                         {/* Chess board */}
                         <div className="
-                        flex min-w-0 justify-center
-                        min-[951px]:col-start-2
-                        min-[951px]:row-start-1
-                        min-[951px]:row-span-2
-                        min-[951px]:min-h-0
-                        min-[951px]:items-center
-                        min-[951px]:overflow-hidden
-                    ">
+        flex min-w-0 justify-center
+        min-[951px]:col-start-2
+        min-[951px]:row-start-1
+        min-[951px]:min-h-0
+        min-[951px]:items-center
+        min-[951px]:overflow-hidden
+    ">
                             <ChessBoard
                                 game={game}
                                 playerColor={playerColor}
                             />
                         </div>
 
-                        {/* Current player */}
+                        {/* MOBILE: Current player - luôn nằm dưới bàn cờ */}
                         <div className="
-                        min-w-0
-                        min-[951px]:col-start-1
-                        min-[951px]:row-start-2
-                        min-[951px]:self-start
-                    ">
+        flex h-10 w-full min-w-0 items-center gap-2
+        min-[951px]:hidden
+    ">
                             <GamePlayerCard
                                 name={user?.name || 'You'}
-                                color={playerColor}
-                                remainingMs={playerRemainingMs}
-                                isActive={isPlayerTurn}
-                                isCurrentPlayer
                                 capturedPieces={playerCapturedPieces}
                                 materialAdvantage={playerMaterialAdvantage}
+                                className="flex-1"
+                            />
+
+                            <GameClock
+                                remainingMs={playerRemainingMs}
+                                isActive={isPlayerTurn}
+                                variant="compact"
                             />
                         </div>
 
                         {/* Move history */}
                         <div className="
-                        min-w-0
-                        min-[951px]:col-start-3
-                        min-[951px]:row-start-1
-                        min-[951px]:row-span-2
-                        min-[951px]:min-h-0
-                    ">
+        min-w-0
+        min-[951px]:col-start-3
+        min-[951px]:row-start-1
+        min-[951px]:min-h-0
+    ">
                             <MoveHistoryPanel
                                 historyItems={game.historyItems}
                                 fullMoveNumber={game.fullMoveNumber}
