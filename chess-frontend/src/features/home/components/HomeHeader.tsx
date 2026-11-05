@@ -41,13 +41,6 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({user, onLogout,}) => {
                     >
                         Home
                     </NavLink>
-
-                    <a
-                        href="#matchmaking"
-                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-900 hover:text-white"
-                    >
-                        Play
-                    </a>
                 </nav>
 
                 <div className="flex items-center gap-3">
