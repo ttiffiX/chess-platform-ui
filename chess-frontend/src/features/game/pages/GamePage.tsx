@@ -1,8 +1,10 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
 import {getGame} from '../services/gameApi';
+import {useGameSocket} from '../hooks/useGameSocket';
+
 import {AppHeader} from '../../../components/layout/AppHeader';
 import {ChessBoard} from '../components/ChessBoard';
 import {GamePlayerCard} from '../components/GamePlayerCard';
@@ -38,7 +40,7 @@ const getErrorMessage = (error: unknown): string => {
 
 export const GamePage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
-    const {user, logout} = useAuth();
+    const {user, logout, accessToken} = useAuth();
 
     const [game, setGame] = useState<GameStateResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -81,21 +83,44 @@ export const GamePage: React.FC = () => {
         };
     }, [gameId]);
 
+    // Chỉ nhận broadcast thuộc đúng ván đấu đang mở.
+    const handleGameState = useCallback((nextState: GameStateResponse) => {
+        setGame((currentGame) => {
+            if (!currentGame || currentGame.gameId !== nextState.gameId) {
+                return currentGame;
+            }
+
+            return nextState;
+        });
+    }, []);
+
+    // Chỉ kết nối WebSocket sau khi REST đã tải được ván đấu.
+    const {
+        isConnected,
+        error: socketError,
+        sendMove,
+    } = useGameSocket({
+        accessToken,
+        gameId: gameId ?? null,
+        enabled: Boolean(game && accessToken && gameId),
+        onGameState: handleGameState,
+    });
+
     if (isLoading) {
         return (
             <div className="min-h-dvh bg-slate-950 text-white">
                 <AppHeader user={user} onLogout={logout}/>
 
                 <main className="
-                flex min-h-[calc(100dvh-4rem)]
-                items-center justify-center
-            ">
+                    flex min-h-[calc(100dvh-4rem)]
+                    items-center justify-center
+                ">
                     <div className="text-center">
                         <div className="
-                        mx-auto h-8 w-8 animate-spin
-                        rounded-full border-2 border-slate-600
-                        border-t-emerald-300
-                    "/>
+                            mx-auto h-8 w-8 animate-spin
+                            rounded-full border-2 border-slate-600
+                            border-t-emerald-300
+                        "/>
 
                         <p className="mt-4 text-sm text-slate-400">
                             Loading game...
@@ -112,14 +137,14 @@ export const GamePage: React.FC = () => {
                 <AppHeader user={user} onLogout={logout}/>
 
                 <main className="
-                flex min-h-[calc(100dvh-4rem)]
-                items-center justify-center px-4
-            ">
-                    <div className="
-                    w-full max-w-md rounded-2xl
-                    border border-slate-800
-                    bg-slate-900 p-6 text-center
+                    flex min-h-[calc(100dvh-4rem)]
+                    items-center justify-center px-4
                 ">
+                    <div className="
+                        w-full max-w-md rounded-2xl
+                        border border-slate-800
+                        bg-slate-900 p-6 text-center
+                    ">
                         <h1 className="text-xl font-bold">
                             Unable to open game
                         </h1>
@@ -131,11 +156,11 @@ export const GamePage: React.FC = () => {
                         <Link
                             to="/home"
                             className="
-                            mt-6 inline-flex rounded-xl
-                            bg-emerald-300 px-5 py-2.5
-                            text-sm font-bold text-slate-950
-                            hover:bg-emerald-200
-                        "
+                                mt-6 inline-flex rounded-xl
+                                bg-emerald-300 px-5 py-2.5
+                                text-sm font-bold text-slate-950
+                                hover:bg-emerald-200
+                            "
                         >
                             Back to home
                         </Link>
@@ -217,49 +242,45 @@ export const GamePage: React.FC = () => {
 
     return (
         <div className="
-        min-h-dvh bg-slate-950 text-white
-        min-[951px]:h-dvh min-[951px]:overflow-hidden
-    ">
+            min-h-dvh bg-slate-950 text-white
+            min-[951px]:h-dvh min-[951px]:overflow-hidden
+        ">
             <AppHeader
                 user={user}
                 onLogout={logout}
             />
 
             <main className="
-            min-h-[calc(100dvh-4rem)]
-            px-3 py-2 sm:px-6 sm:py-3
-            min-[951px]:h-[calc(100dvh-4rem)]
-            min-[951px]:min-h-0
-            min-[951px]:overflow-hidden
-        ">
-                <div className="
-                mx-auto flex min-h-[calc(100dvh-5rem)]
-                max-w-[1600px] flex-col
-                min-[951px]:h-full
+                min-h-[calc(100dvh-4rem)]
+                px-3 py-2 sm:px-6 sm:py-3
+                min-[951px]:h-[calc(100dvh-4rem)]
                 min-[951px]:min-h-0
+                min-[951px]:overflow-hidden
             ">
-
+                <div className="
+                    mx-auto flex min-h-[calc(100dvh-5rem)]
+                    max-w-[1600px] flex-col
+                    min-[951px]:h-full
+                    min-[951px]:min-h-0
+                ">
                     {/* Main game layout */}
-
-
                     <section className="
-    mx-auto grid w-full
-    max-w-[min(100%,820px,calc(100dvh_-_330px))]
-    grid-cols-1 gap-2
+                        mx-auto grid w-full
+                        max-w-[min(100%,820px,calc(100dvh_-_330px))]
+                        grid-cols-1 gap-2
 
-    min-[951px]:max-w-[1100px]
-    min-[951px]:min-h-0
-    min-[951px]:flex-1
-    min-[951px]:grid-cols-[180px_minmax(0,1fr)_clamp(160px,calc(100vw_-_1060px),320px)]
-    {/*min-[951px]:grid-cols-[240px_minmax(0,min(820px,calc(100%_-_416px)))_minmax(160px,1fr)]*/}
-    min-[951px]:grid-rows-[minmax(0,1fr)]
-    min-[951px]:gap-3
-">
-                        {/* MOBILE: Opponent - luôn nằm trên bàn cờ */}
+                        min-[951px]:max-w-[1100px]
+                        min-[951px]:min-h-0
+                        min-[951px]:flex-1
+                        min-[951px]:grid-cols-[180px_minmax(0,1fr)_clamp(160px,calc(100vw_-_1060px),320px)]
+                        min-[951px]:grid-rows-[minmax(0,1fr)]
+                        min-[951px]:gap-3
+                    ">
+                        {/* MOBILE: Opponent */}
                         <div className="
-        flex h-10 w-full min-w-0 items-center gap-2
-        min-[951px]:hidden
-    ">
+                            flex h-10 w-full min-w-0 items-center gap-2
+                            min-[951px]:hidden
+                        ">
                             <GamePlayerCard
                                 name="Opponent"
                                 capturedPieces={opponentCapturedPieces}
@@ -274,30 +295,28 @@ export const GamePage: React.FC = () => {
                             />
                         </div>
 
-                        {/* DESKTOP: Toàn bộ player column nằm bên trái */}
+                        {/* DESKTOP: Player column */}
                         <div className="
-        hidden min-w-0
-        min-[951px]:col-start-1
-        min-[951px]:row-start-1
-        min-[951px]:flex
-        min-[951px]:h-full
-        min-[951px]:min-h-0
-        min-[951px]:flex-col
-        min-[951px]:items-stretch
-        min-[951px]:py-2
-    ">
-                            {/* Opponent information */}
+                            hidden min-w-0
+                            min-[951px]:col-start-1
+                            min-[951px]:row-start-1
+                            min-[951px]:flex
+                            min-[951px]:h-full
+                            min-[951px]:min-h-0
+                            min-[951px]:flex-col
+                            min-[951px]:items-stretch
+                            min-[951px]:py-2
+                        ">
                             <GamePlayerCard
                                 name="Opponent"
                                 capturedPieces={opponentCapturedPieces}
                                 materialAdvantage={opponentMaterialAdvantage}
                             />
 
-                            {/* Both clocks occupy the space between players */}
                             <div className="
-            flex min-h-0 flex-1
-            flex-col items-center justify-center gap-3
-        ">
+                                flex min-h-0 flex-1
+                                flex-col items-center justify-center gap-3
+                            ">
                                 <GameClock
                                     remainingMs={opponentRemainingMs}
                                     isActive={isOpponentTurn}
@@ -311,7 +330,6 @@ export const GamePage: React.FC = () => {
                                 />
                             </div>
 
-                            {/* Current player information */}
                             <GamePlayerCard
                                 name={user?.name || 'You'}
                                 capturedPieces={playerCapturedPieces}
@@ -321,24 +339,27 @@ export const GamePage: React.FC = () => {
 
                         {/* Chess board */}
                         <div className="
-        flex min-w-0 justify-center
-        min-[951px]:col-start-2
-        min-[951px]:row-start-1
-        min-[951px]:min-h-0
-        min-[951px]:items-center
-        min-[951px]:overflow-hidden
-    ">
+                            flex min-w-0 justify-center
+                            min-[951px]:col-start-2
+                            min-[951px]:row-start-1
+                            min-[951px]:min-h-0
+                            min-[951px]:items-center
+                            min-[951px]:overflow-hidden
+                        ">
                             <ChessBoard
                                 game={game}
                                 playerColor={playerColor}
+                                isConnected={isConnected}
+                                socketError={socketError}
+                                onMove={sendMove}
                             />
                         </div>
 
-                        {/* MOBILE: Current player - luôn nằm dưới bàn cờ */}
+                        {/* MOBILE: Current player */}
                         <div className="
-        flex h-10 w-full min-w-0 items-center gap-2
-        min-[951px]:hidden
-    ">
+                            flex h-10 w-full min-w-0 items-center gap-2
+                            min-[951px]:hidden
+                        ">
                             <GamePlayerCard
                                 name={user?.name || 'You'}
                                 capturedPieces={playerCapturedPieces}
@@ -355,11 +376,11 @@ export const GamePage: React.FC = () => {
 
                         {/* Move history */}
                         <div className="
-        min-w-0
-        min-[951px]:col-start-3
-        min-[951px]:row-start-1
-        min-[951px]:min-h-0
-    ">
+                            min-w-0
+                            min-[951px]:col-start-3
+                            min-[951px]:row-start-1
+                            min-[951px]:min-h-0
+                        ">
                             <MoveHistoryPanel
                                 historyItems={game.historyItems}
                                 fullMoveNumber={game.fullMoveNumber}

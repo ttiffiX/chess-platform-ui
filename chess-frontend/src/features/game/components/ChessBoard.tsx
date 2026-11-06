@@ -10,6 +10,9 @@ import {ChessPiece} from './ChessPiece';
 interface ChessBoardProps {
     game: GameStateResponse;
     playerColor: PieceColor | null;
+    isConnected: boolean;
+    socketError: string | null;
+    onMove: (from: string, to: string) => boolean;
 }
 
 interface PendingMove {
@@ -17,12 +20,21 @@ interface PendingMove {
     to: string;
 }
 
-export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
+export const ChessBoard: React.FC<ChessBoardProps> = ({
+                                                          game,
+                                                          playerColor,
+                                                          isConnected,
+                                                          socketError,
+                                                          onMove,
+                                                      }) => {
     const [selectedSquare, setSelectedSquare] =
         useState<string | null>(null);
 
     const [pendingMove, setPendingMove] =
         useState<PendingMove | null>(null);
+
+    const [boardMessage, setBoardMessage] =
+        useState<string | null>(null);
 
     // Xoay bàn cờ theo góc nhìn của người chơi.
     const orientation = playerColor ?? 'WHITE';
@@ -40,10 +52,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
         files.map((file) => `${file}${rank}`),
     );
 
-    const canInteract =
+    const isPlayerTurn =
         playerColor !== null &&
         playerColor === game.currentTurn &&
         game.gameResult.status === 'IN_PROGRESS';
+
+    const canInteract =
+        isConnected &&
+        isPlayerTurn &&
+        pendingMove === null;
 
     // Những ô có thể đi từ quân đang được chọn.
     const legalDestinations = selectedSquare
@@ -63,11 +80,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
         ? game.historyItems[game.historyItems.length - 1]
         : null;
 
-    // Khi lượt đi thay đổi, xóa lựa chọn cũ.
+    // Khi trạng thái ván đấu thay đổi, xóa lựa chọn và nước đang chờ.
     useEffect(() => {
         setSelectedSquare(null);
         setPendingMove(null);
-    }, [game.gameId, game.currentTurn]);
+        setBoardMessage(null);
+    }, [
+        game.gameId,
+        game.currentTurn,
+        game.gameResult.status,
+        game.historyItems.length,
+    ]);
+
+    // Nếu Backend từ chối nước đi, cho phép người chơi thao tác lại.
+    useEffect(() => {
+        if (socketError && pendingMove) {
+            setPendingMove(null);
+        }
+    }, [socketError, pendingMove]);
 
     const handleSquareClick = (square: string) => {
         if (!canInteract) {
@@ -78,19 +108,43 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
 
         // Nếu đang chọn quân và click vào ô đi hợp lệ.
         if (selectedSquare && legalDestinations.includes(square)) {
-            setPendingMove({
+            const movingPiece = game.board[selectedSquare];
+
+            // Tạm thời chưa hỗ trợ lựa chọn quân phong cấp.
+            const isPromotion =
+                movingPiece?.type === 'PAWN' &&
+                (
+                    (movingPiece.color === 'WHITE' && square[1] === '8') ||
+                    (movingPiece.color === 'BLACK' && square[1] === '1')
+                );
+
+            if (isPromotion) {
+                setBoardMessage(
+                    'Pawn promotion is not available yet.',
+                );
+                return;
+            }
+
+            const move = {
                 from: selectedSquare,
                 to: square,
-            });
+            };
 
-            setSelectedSquare(null);
+            const sent = onMove(move.from, move.to);
+
+            if (sent) {
+                setPendingMove(move);
+                setSelectedSquare(null);
+                setBoardMessage(null);
+            }
+
             return;
         }
 
         // Click lại chính ô đang chọn để bỏ chọn.
         if (selectedSquare === square) {
             setSelectedSquare(null);
-            setPendingMove(null);
+            setBoardMessage(null);
             return;
         }
 
@@ -102,12 +156,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
             (game.legalMoves[square]?.length ?? 0) > 0
         ) {
             setSelectedSquare(square);
-            setPendingMove(null);
+            setBoardMessage(null);
             return;
         }
 
         setSelectedSquare(null);
-        setPendingMove(null);
+        setBoardMessage(null);
     };
 
     return (
@@ -116,18 +170,18 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
             {/* Chess board container */}
             <div
                 className="
-                mx-auto aspect-square w-full
-                max-w-[min(820px,calc(100dvh_-_150px))]
-            "
+                    mx-auto aspect-square w-full
+                    max-w-[min(820px,calc(100dvh_-_150px))]
+                "
             >
                 <div
                     className="
-                    grid h-full w-full
-                    grid-cols-8 grid-rows-8
-                    overflow-hidden rounded-lg
-                    border border-slate-700
-                    shadow-2xl shadow-black/30
-                "
+                        grid h-full w-full
+                        grid-cols-8 grid-rows-8
+                        overflow-hidden rounded-lg
+                        border border-slate-700
+                        shadow-2xl shadow-black/30
+                    "
                     role="group"
                     aria-label="Chess board"
                 >
@@ -172,41 +226,55 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
                                 }`}
                                 aria-pressed={isSelected}
                                 className={`
-                                relative flex min-h-0 min-w-0
-                                items-center justify-center
-                                transition-colors
-                                disabled:cursor-default
-                                ${
+                                    relative flex min-h-0 min-w-0
+                                    items-center justify-center
+                                    transition-colors
+                                    disabled:cursor-default
+                                    ${
                                     isLightSquare
                                         ? 'bg-[#EEEED2]'
                                         : 'bg-[#769656]'
                                 }
-                                ${
+                                    ${
                                     isSelected
                                         ? 'z-10 ring-4 ring-inset ring-amber-400'
                                         : ''
                                 }
-                                ${
+                                    ${
                                     isCheckedKing
                                         ? 'z-10 ring-4 ring-inset ring-red-500'
                                         : ''
                                 }
-                            `}
+                                `}
                             >
                                 {isLastMoveSquare && (
-                                    <span className="pointer-events-none absolute inset-0 bg-yellow-300/25" />
+                                    <span className="
+                                        pointer-events-none absolute inset-0
+                                        bg-yellow-300/25
+                                    "/>
                                 )}
 
                                 {isLegalDestination && !isCaptureTarget && (
-                                    <span className="pointer-events-none absolute h-[22%] w-[22%] rounded-full bg-slate-900/25" />
+                                    <span className="
+                                        pointer-events-none absolute
+                                        h-[22%] w-[22%] rounded-full
+                                        bg-slate-900/25
+                                    "/>
                                 )}
 
                                 {isCaptureTarget && (
-                                    <span className="pointer-events-none absolute inset-[6%] rounded-full border-[4px] border-slate-900/25" />
+                                    <span className="
+                                        pointer-events-none absolute inset-[6%]
+                                        rounded-full border-[4px]
+                                        border-slate-900/25
+                                    "/>
                                 )}
 
                                 {isCheckedKing && (
-                                    <span className="pointer-events-none absolute inset-0 bg-red-500/35" />
+                                    <span className="
+                                        pointer-events-none absolute inset-0
+                                        bg-red-500/35
+                                    "/>
                                 )}
 
                                 {piece && (
@@ -219,35 +287,37 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
                                 {showFileLabel && (
                                     <span
                                         className={`
-                                        pointer-events-none absolute bottom-0.5 right-1
-                                        text-[clamp(0.5rem,1.5vw,0.75rem)]
-                                        font-bold
-                                        ${
+                                            pointer-events-none absolute
+                                            bottom-0.5 right-1
+                                            text-[clamp(0.5rem,1.5vw,0.75rem)]
+                                            font-bold
+                                            ${
                                             isLightSquare
                                                 ? 'text-[#769656]'
                                                 : 'text-[#EEEED2]'
                                         }
-                                    `}
+                                        `}
                                     >
-                                    {square[0]}
-                                </span>
+                                        {square[0]}
+                                    </span>
                                 )}
 
                                 {showRankLabel && (
                                     <span
                                         className={`
-                                        pointer-events-none absolute left-1 top-0.5
-                                        text-[clamp(0.5rem,1.5vw,0.75rem)]
-                                        font-bold
-                                        ${
+                                            pointer-events-none absolute
+                                            left-1 top-0.5
+                                            text-[clamp(0.5rem,1.5vw,0.75rem)]
+                                            font-bold
+                                            ${
                                             isLightSquare
                                                 ? 'text-[#769656]'
                                                 : 'text-[#EEEED2]'
                                         }
-                                    `}
+                                        `}
                                     >
-                                    {square[1]}
-                                </span>
+                                        {square[1]}
+                                    </span>
                                 )}
                             </button>
                         );
@@ -256,21 +326,36 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({game, playerColor,}) => {
             </div>
 
             {/* Board status */}
-            <div className="mt-2 flex min-h-8 items-center justify-center text-center text-sm">
-                {!canInteract ? (
+            <div className="
+                mt-2 flex min-h-8 items-center justify-center
+                text-center text-sm
+            ">
+                {game.gameResult.status !== 'IN_PROGRESS' ? (
                     <p className="text-slate-500">
-                        {game.gameResult.status !== 'IN_PROGRESS'
-                            ? 'This game has finished.'
-                            : 'Waiting for your turn.'
-                        }
+                        This game has finished.
+                    </p>
+                ) : socketError ? (
+                    <p className="text-red-300">
+                        {socketError}
+                    </p>
+                ) : !isConnected ? (
+                    <p className="text-slate-500">
+                        Connecting to game server...
+                    </p>
+                ) : !isPlayerTurn ? (
+                    <p className="text-slate-500">
+                        Waiting for your turn.
                     </p>
                 ) : pendingMove ? (
                     <p className="text-amber-300">
-                        Selected move: {pendingMove.from} → {pendingMove.to}
-
+                        Move sent: {pendingMove.from} → {pendingMove.to}
                         <span className="mt-1 block text-xs text-slate-500">
-                        Move synchronization will be connected next.
-                    </span>
+                            Waiting for server confirmation...
+                        </span>
+                    </p>
+                ) : boardMessage ? (
+                    <p className="text-amber-300">
+                        {boardMessage}
                     </p>
                 ) : selectedSquare ? (
                     <p className="text-emerald-300">
