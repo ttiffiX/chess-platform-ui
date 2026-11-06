@@ -247,10 +247,11 @@ export const GamePage: React.FC = () => {
     max-w-[min(100%,820px,calc(100dvh_-_330px))]
     grid-cols-1 gap-2
 
-    min-[951px]:max-w-[1440px]
+    min-[951px]:max-w-[1100px]
     min-[951px]:min-h-0
     min-[951px]:flex-1
-    min-[951px]:grid-cols-[200px_minmax(0,1fr)_minmax(300px,340px)]
+    min-[951px]:grid-cols-[180px_minmax(0,1fr)_clamp(160px,calc(100vw_-_1060px),320px)]
+    {/*min-[951px]:grid-cols-[240px_minmax(0,min(820px,calc(100%_-_416px)))_minmax(160px,1fr)]*/}
     min-[951px]:grid-rows-[minmax(0,1fr)]
     min-[951px]:gap-3
 ">

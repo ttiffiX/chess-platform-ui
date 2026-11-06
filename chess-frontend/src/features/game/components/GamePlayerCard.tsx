@@ -132,7 +132,7 @@ export const GamePlayerCard: React.FC<GamePlayerCardProps> = ({
 
             {/* Captured pieces on the right on desktop */}
             <div className="
-                hidden w-[80px] shrink-0
+                hidden w-[20px] shrink-0
                 items-center justify-end
                 min-[951px]:flex
             ">
