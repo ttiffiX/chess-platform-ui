@@ -55,9 +55,12 @@ export interface GameStateResponse {
     whiteRemainingMs: number | null;
     blackRemainingMs: number | null;
     turnStartTimeEpochMs: number | null;
+    serverTimeEpochMs: number | null;
 
     whitePlayerId: string;
     blackPlayerId: string;
 
     drawOfferedBy: PieceColor | null;
+
+    stateVersion: number;
 }

@@ -104,6 +104,17 @@ export const GameActionBar: React.FC<GameActionBarProps> = ({
         drawOfferedBy !== null &&
         drawOfferedBy === playerColor;
 
+    const handleOfferDraw = () => {
+        const confirmed = window.confirm(
+            'Are you sure you want to offer a draw?',
+        );
+
+        if (confirmed) {
+            onOfferDraw();
+        }
+    };
+
+
     const handleResign = () => {
         const confirmed = window.confirm(
             'Are you sure you want to resign this game?',
@@ -239,7 +250,7 @@ export const GameActionBar: React.FC<GameActionBarProps> = ({
                     <button
                         type="button"
                         disabled={!canUseGameActions}
-                        onClick={onOfferDraw}
+                        onClick={handleOfferDraw}
                         className="
                             w-full rounded-lg border border-slate-700
                             bg-slate-950 px-3 py-2

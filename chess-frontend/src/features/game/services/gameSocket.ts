@@ -51,6 +51,11 @@ const parseGameState = (
             !isRecord(data.board) ||
             !isRecord(data.legalMoves) ||
             !Array.isArray(data.historyItems) ||
+            !Array.isArray(data.capturedWhitePieces) ||
+            !Array.isArray(data.capturedBlackPieces) ||
+            typeof data.stateVersion !== 'number' ||
+            !Number.isInteger(data.stateVersion) ||
+            typeof data.serverTimeEpochMs !== 'number' ||
             !['WHITE', 'BLACK'].includes(String(data.currentTurn))
         ) {
             return null;

@@ -10,6 +10,7 @@ import {ChessPiece} from './ChessPiece';
 
 interface ChessBoardProps {
     game: GameStateResponse;
+    moveIndex: number;
     playerColor: PieceColor | null;
     isConnected: boolean;
     socketError: string | null;
@@ -48,6 +49,7 @@ const promotionOptions: {
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
                                                           game,
+                                                          moveIndex,
                                                           playerColor,
                                                           isConnected,
                                                           socketError,
@@ -106,8 +108,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     )?.[0] ?? null
         : null;
 
-    const lastMove = game.historyItems.length > 0
-        ? game.historyItems[game.historyItems.length - 1]
+    // Nước đi dẫn đến snapshot hiện tại.
+    const lastMove = moveIndex > 0
+        ? game.historyItems.find(
+        (move) => move.moveIndex === moveIndex,
+    ) ?? null
         : null;
 
     // Khi trạng thái ván đấu thay đổi, xóa lựa chọn cũ.
@@ -120,6 +125,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         game.currentTurn,
         game.gameResult.status,
         game.historyItems.length,
+        moveIndex,
     ]);
 
     // Nếu WebSocket báo lỗi, cho phép người chơi thao tác lại.

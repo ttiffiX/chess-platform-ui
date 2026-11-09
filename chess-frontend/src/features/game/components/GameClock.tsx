@@ -10,6 +10,7 @@ interface GameClockProps {
     label: string;
     remainingMs: number | null;
     turnStartTimeEpochMs: number | null;
+    serverTimeEpochMs: number | null;
     isActive: boolean;
     onTimeExpired?: () => boolean;
     className?: string;
@@ -19,25 +20,43 @@ export const GameClock: React.FC<GameClockProps> = ({
                                                         label,
                                                         remainingMs,
                                                         turnStartTimeEpochMs,
+                                                        serverTimeEpochMs,
                                                         isActive,
                                                         onTimeExpired,
                                                         className = '',
                                                     }) => {
-    const [now, setNow] = useState(() => Date.now());
+    const [performanceNow, setPerformanceNow] = useState(
+        () => performance.now(),
+    );
 
+    const receivedAtRef = useRef(performance.now());
     const handledTurnRef = useRef<string | null>(null);
 
+    // Reset baseline whenever a new server clock snapshot arrives.
+    useEffect(() => {
+        const receivedAt = performance.now();
+
+        receivedAtRef.current = receivedAt;
+        setPerformanceNow(receivedAt);
+    }, [
+        remainingMs,
+        turnStartTimeEpochMs,
+        serverTimeEpochMs,
+    ]);
+
+    // Update the displayed clock using a monotonic timer.
     useEffect(() => {
         if (
             !isActive ||
             remainingMs === null ||
-            turnStartTimeEpochMs === null
+            turnStartTimeEpochMs === null ||
+            serverTimeEpochMs === null
         ) {
             return;
         }
 
         const updateTime = () => {
-            setNow(Date.now());
+            setPerformanceNow(performance.now());
         };
 
         updateTime();
@@ -51,17 +70,37 @@ export const GameClock: React.FC<GameClockProps> = ({
         isActive,
         remainingMs,
         turnStartTimeEpochMs,
+        serverTimeEpochMs,
     ]);
 
-    const elapsedMs =
-        isActive && turnStartTimeEpochMs !== null
-            ? Math.max(0, now - turnStartTimeEpochMs)
+    // Time elapsed between the turn starting and the server response.
+    const serverElapsedMs =
+        isActive &&
+        turnStartTimeEpochMs !== null &&
+        serverTimeEpochMs !== null
+            ? Math.max(
+                0,
+                serverTimeEpochMs - turnStartTimeEpochMs,
+            )
             : 0;
 
+    // Time elapsed since the frontend received that response.
+    const clientElapsedMs = isActive
+        ? Math.max(
+            0,
+            performanceNow - receivedAtRef.current,
+        )
+        : 0;
+
     const currentRemainingMs =
-        remainingMs === null || turnStartTimeEpochMs === null
+        remainingMs === null ||
+        turnStartTimeEpochMs === null ||
+        serverTimeEpochMs === null
             ? null
-            : Math.max(0, remainingMs - elapsedMs);
+            : Math.max(
+                0,
+                remainingMs - serverElapsedMs - clientElapsedMs,
+            );
 
     // Request timeout only once successfully for each active turn.
     useEffect(() => {
@@ -90,7 +129,7 @@ export const GameClock: React.FC<GameClockProps> = ({
     }, [
         isActive,
         currentRemainingMs,
-        now,
+        performanceNow,
         turnStartTimeEpochMs,
         label,
         onTimeExpired,
@@ -128,11 +167,13 @@ export const GameClock: React.FC<GameClockProps> = ({
                 whitespace-nowrap
                 font-mono text-sm font-bold
                 tabular-nums tracking-tight
+
                 ${
                 isActive
                     ? 'text-emerald-300'
                     : 'text-white'
             }
+
                 min-[951px]:text-xl
             `}>
                 {time}

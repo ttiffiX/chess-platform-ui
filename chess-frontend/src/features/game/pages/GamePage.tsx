@@ -126,12 +126,25 @@ export const GamePage: React.FC = () => {
         setIsReviewLoading(false);
     }, [gameId]);
 
-    // Receive live game state from WebSocket.
+    // Accept only newer game states.
+    // For the same version, accept a newer server clock snapshot.
     const handleGameState = useCallback((nextState: GameStateResponse) => {
         setGame((currentGame) => {
             if (
                 !currentGame ||
                 currentGame.gameId !== nextState.gameId
+            ) {
+                return currentGame;
+            }
+
+            if (nextState.stateVersion < currentGame.stateVersion) {
+                return currentGame;
+            }
+
+            if (
+                nextState.stateVersion === currentGame.stateVersion &&
+                (nextState.serverTimeEpochMs ?? 0) <=
+                (currentGame.serverTimeEpochMs ?? 0)
             ) {
                 return currentGame;
             }
@@ -159,6 +172,31 @@ export const GamePage: React.FC = () => {
         ),
         onGameState: handleGameState,
     });
+
+    // Resync from REST after initial connection and every reconnect.
+    // stateVersion prevents an older REST response from overwriting
+    // a newer state already received through WebSocket.
+    useEffect(() => {
+        if (!isConnected || !gameId) {
+            return;
+        }
+
+        let cancelled = false;
+
+        void getGame(gameId)
+            .then((latestState) => {
+                if (!cancelled) {
+                    handleGameState(latestState);
+                }
+            })
+            .catch(() => {
+                // The shared Axios interceptor already reports HTTP errors.
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isConnected, gameId, handleGameState]);
 
     // Show WebSocket errors through existing toast system.
     useEffect(() => {
@@ -366,30 +404,30 @@ export const GamePage: React.FC = () => {
                 ? game.blackRemainingMs
                 : null;
 
-    // Resolve captured pieces.
+    // Resolve captured pieces from the currently displayed state.
     const playerCapturedPieces = getPiecesCapturedBy(
         playerColor,
-        game.capturedWhitePieces,
-        game.capturedBlackPieces,
+        displayGame.capturedWhitePieces,
+        displayGame.capturedBlackPieces,
     );
 
     const opponentCapturedPieces = getPiecesCapturedBy(
         opponentColor,
-        game.capturedWhitePieces,
-        game.capturedBlackPieces,
+        displayGame.capturedWhitePieces,
+        displayGame.capturedBlackPieces,
     );
 
-    // Resolve material advantage.
+    // Resolve material advantage from the currently displayed state.
     const playerMaterialAdvantage = getMaterialAdvantage(
         playerColor,
-        game.capturedWhitePieces,
-        game.capturedBlackPieces,
+        displayGame.capturedWhitePieces,
+        displayGame.capturedBlackPieces,
     );
 
     const opponentMaterialAdvantage = getMaterialAdvantage(
         opponentColor,
-        game.capturedWhitePieces,
-        game.capturedBlackPieces,
+        displayGame.capturedWhitePieces,
+        displayGame.capturedBlackPieces,
     );
 
     // Active turn.
@@ -486,6 +524,7 @@ export const GamePage: React.FC = () => {
                                 label="Opponent"
                                 remainingMs={opponentRemainingMs}
                                 turnStartTimeEpochMs={game.turnStartTimeEpochMs}
+                                serverTimeEpochMs={game.serverTimeEpochMs}
                                 isActive={isOpponentTurn}
                                 onTimeExpired={handleClockExpired}
                             />
@@ -517,6 +556,7 @@ export const GamePage: React.FC = () => {
                                     label="Opponent"
                                     remainingMs={opponentRemainingMs}
                                     turnStartTimeEpochMs={game.turnStartTimeEpochMs}
+                                    serverTimeEpochMs={game.serverTimeEpochMs}
                                     isActive={isOpponentTurn}
                                     onTimeExpired={handleClockExpired}
                                 />
@@ -525,6 +565,7 @@ export const GamePage: React.FC = () => {
                                     label="You"
                                     remainingMs={playerRemainingMs}
                                     turnStartTimeEpochMs={game.turnStartTimeEpochMs}
+                                    serverTimeEpochMs={game.serverTimeEpochMs}
                                     isActive={isPlayerTurn}
                                     onTimeExpired={handleClockExpired}
                                 />
@@ -549,6 +590,7 @@ export const GamePage: React.FC = () => {
                             <ChessBoard
                                 key={isReviewing ? `review-${currentMoveIndex}` : 'live'}
                                 game={displayGame}
+                                moveIndex={currentMoveIndex}
                                 playerColor={playerColor}
                                 isConnected={isConnected && !isReviewing}
                                 socketError={isReviewing ? null : socketError}
@@ -572,6 +614,7 @@ export const GamePage: React.FC = () => {
                                 label="You"
                                 remainingMs={playerRemainingMs}
                                 turnStartTimeEpochMs={game.turnStartTimeEpochMs}
+                                serverTimeEpochMs={game.serverTimeEpochMs}
                                 isActive={isPlayerTurn}
                                 onTimeExpired={handleClockExpired}
                             />
