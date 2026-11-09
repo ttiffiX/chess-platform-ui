@@ -1,4 +1,4 @@
-import type { UserInfo } from '../../../types/user';
+import type {UserInfo} from '../../../types/user';
 
 export interface AuthResponse {
     accessToken: string;
@@ -11,7 +11,5 @@ export interface AuthContextType {
     user: UserInfo | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    loginSuccess: (data: AuthResponse) => void;
     logout: () => Promise<void>;
-    checkAuthOnBoot: () => Promise<boolean>;
 }

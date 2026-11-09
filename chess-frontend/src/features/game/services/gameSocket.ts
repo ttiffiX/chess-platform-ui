@@ -1,8 +1,17 @@
 import {Client, type IMessage} from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
+import {
+    getApiAccessToken,
+    getFreshAccessToken,
+} from '../../../api/client';
+
 import {WS_BASE_URL} from '../../../config/env';
-import type {GameStateResponse, PieceType} from '../types/game';
+
+import type {
+    GameStateResponse,
+    PieceType,
+} from '../types/game';
 
 export type GameAction =
     | 'offerDraw'
@@ -19,7 +28,6 @@ interface GameSocketHandlers {
 }
 
 interface CreateGameSocketParams {
-    accessToken: string;
     gameId: string;
     handlers: GameSocketHandlers;
 }
@@ -55,7 +63,6 @@ const parseGameState = (
 };
 
 export const createGameSocket = ({
-                                     accessToken,
                                      gameId,
                                      handlers,
                                  }: CreateGameSocketParams): Client => {
@@ -63,8 +70,31 @@ export const createGameSocket = ({
         webSocketFactory: () =>
             new SockJS(WS_BASE_URL) as unknown as WebSocket,
 
-        connectHeaders: {
-            Authorization: `Bearer ${accessToken}`,
+        connectHeaders: {},
+
+        // Lấy token mới nhất trước mỗi lần CONNECT/reconnect.
+        beforeConnect: async () => {
+            const fallbackToken = getApiAccessToken();
+
+            try {
+                const token = await getFreshAccessToken();
+
+                client.connectHeaders = token
+                    ? {
+                        Authorization: `Bearer ${token}`,
+                    }
+                    : {};
+            } catch {
+                // Nếu refresh tạm thời thất bại, thử kết nối bằng
+                // token hiện tại. Lần reconnect tiếp theo sẽ thử refresh lại.
+                const token = getApiAccessToken() ?? fallbackToken;
+
+                client.connectHeaders = token
+                    ? {
+                        Authorization: `Bearer ${token}`,
+                    }
+                    : {};
+            }
         },
 
         reconnectDelay: 3000,

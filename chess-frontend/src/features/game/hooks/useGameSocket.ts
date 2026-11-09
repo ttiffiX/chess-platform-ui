@@ -1,3 +1,4 @@
+
 import {
     useCallback,
     useEffect,
@@ -5,7 +6,7 @@ import {
     useState,
 } from 'react';
 
-import type {Client} from '@stomp/stompjs';
+import type { Client } from '@stomp/stompjs';
 
 import type {
     GameStateResponse,
@@ -29,11 +30,13 @@ interface UseGameSocketParams {
 interface UseGameSocketResult {
     isConnected: boolean;
     error: string | null;
+
     sendMove: (
         from: string,
         to: string,
         promotionType?: PieceType,
     ) => boolean;
+
     offerDraw: () => boolean;
     acceptDraw: () => boolean;
     declineDraw: () => boolean;
@@ -51,12 +54,19 @@ export const useGameSocket = ({
     const [error, setError] = useState<string | null>(null);
 
     const clientRef = useRef<Client | null>(null);
+
     const onGameStateRef = useRef(onGameState);
+    const accessTokenRef = useRef(accessToken);
 
     onGameStateRef.current = onGameState;
+    accessTokenRef.current = accessToken;
 
     useEffect(() => {
-        if (!enabled || !accessToken || !gameId) {
+        if (
+            !enabled ||
+            !accessTokenRef.current ||
+            !gameId
+        ) {
             setIsConnected(false);
             return;
         }
@@ -67,7 +77,6 @@ export const useGameSocket = ({
         setError(null);
 
         const client = createGameSocket({
-            accessToken,
             gameId,
             handlers: {
                 onConnected: () => {
@@ -112,7 +121,7 @@ export const useGameSocket = ({
 
             void client.deactivate();
         };
-    }, [accessToken, enabled, gameId]);
+    }, [enabled, gameId]);
 
     const sendMove = useCallback((
         from: string,
