@@ -3,6 +3,7 @@ import React, {useEffect, useState} from 'react';
 import type {
     GameStateResponse,
     PieceColor,
+    PieceType,
 } from '../types/game';
 
 import {ChessPiece} from './ChessPiece';
@@ -12,13 +13,38 @@ interface ChessBoardProps {
     playerColor: PieceColor | null;
     isConnected: boolean;
     socketError: string | null;
-    onMove: (from: string, to: string) => boolean;
+    onMove: (
+        from: string,
+        to: string,
+        promotionType?: PieceType,
+    ) => boolean;
 }
 
 interface PendingMove {
     from: string;
     to: string;
 }
+
+interface PendingPromotion {
+    from: string;
+    to: string;
+    color: PieceColor;
+}
+
+type PromotionPieceType = Extract<
+    PieceType,
+    'QUEEN' | 'ROOK' | 'BISHOP' | 'KNIGHT'
+>;
+
+const promotionOptions: {
+    type: PromotionPieceType;
+    label: string;
+}[] = [
+    {type: 'QUEEN', label: 'Queen'},
+    {type: 'ROOK', label: 'Rook'},
+    {type: 'BISHOP', label: 'Bishop'},
+    {type: 'KNIGHT', label: 'Knight'},
+];
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
                                                           game,
@@ -33,8 +59,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const [pendingMove, setPendingMove] =
         useState<PendingMove | null>(null);
 
-    const [boardMessage, setBoardMessage] =
-        useState<string | null>(null);
+    const [pendingPromotion, setPendingPromotion] =
+        useState<PendingPromotion | null>(null);
 
     // Xoay bàn cờ theo góc nhìn của người chơi.
     const orientation = playerColor ?? 'WHITE';
@@ -52,15 +78,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         files.map((file) => `${file}${rank}`),
     );
 
+    const isGameOver =
+        game.gameResult.status !== 'IN_PROGRESS';
+
     const isPlayerTurn =
         playerColor !== null &&
         playerColor === game.currentTurn &&
-        game.gameResult.status === 'IN_PROGRESS';
+        !isGameOver;
 
     const canInteract =
         isConnected &&
         isPlayerTurn &&
-        pendingMove === null;
+        pendingMove === null &&
+        pendingPromotion === null;
 
     // Những ô có thể đi từ quân đang được chọn.
     const legalDestinations = selectedSquare
@@ -80,11 +110,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         ? game.historyItems[game.historyItems.length - 1]
         : null;
 
-    // Khi trạng thái ván đấu thay đổi, xóa lựa chọn và nước đang chờ.
+    // Khi trạng thái ván đấu thay đổi, xóa lựa chọn cũ.
     useEffect(() => {
         setSelectedSquare(null);
         setPendingMove(null);
-        setBoardMessage(null);
+        setPendingPromotion(null);
     }, [
         game.gameId,
         game.currentTurn,
@@ -92,12 +122,30 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         game.historyItems.length,
     ]);
 
-    // Nếu Backend từ chối nước đi, cho phép người chơi thao tác lại.
+    // Nếu WebSocket báo lỗi, cho phép người chơi thao tác lại.
     useEffect(() => {
         if (socketError && pendingMove) {
             setPendingMove(null);
         }
     }, [socketError, pendingMove]);
+
+    const handlePromotion = (promotionType: PromotionPieceType) => {
+        if (!pendingPromotion) {
+            return;
+        }
+
+        const {from, to} = pendingPromotion;
+
+        const sent = onMove(from, to, promotionType);
+
+        if (!sent) {
+            return;
+        }
+
+        setPendingMove({from, to});
+        setPendingPromotion(null);
+        setSelectedSquare(null);
+    };
 
     const handleSquareClick = (square: string) => {
         if (!canInteract) {
@@ -107,35 +155,43 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const piece = game.board[square];
 
         // Nếu đang chọn quân và click vào ô đi hợp lệ.
-        if (selectedSquare && legalDestinations.includes(square)) {
+        if (
+            selectedSquare &&
+            legalDestinations.includes(square)
+        ) {
             const movingPiece = game.board[selectedSquare];
 
-            // Tạm thời chưa hỗ trợ lựa chọn quân phong cấp.
+            // Kiểm tra nước phong cấp.
             const isPromotion =
                 movingPiece?.type === 'PAWN' &&
                 (
-                    (movingPiece.color === 'WHITE' && square[1] === '8') ||
-                    (movingPiece.color === 'BLACK' && square[1] === '1')
+                    (
+                        movingPiece.color === 'WHITE' &&
+                        square[1] === '8'
+                    ) ||
+                    (
+                        movingPiece.color === 'BLACK' &&
+                        square[1] === '1'
+                    )
                 );
 
-            if (isPromotion) {
-                setBoardMessage(
-                    'Pawn promotion is not available yet.',
-                );
+            if (isPromotion && movingPiece) {
+                setPendingPromotion({
+                    from: selectedSquare,
+                    to: square,
+                    color: movingPiece.color,
+                });
                 return;
             }
 
-            const move = {
-                from: selectedSquare,
-                to: square,
-            };
-
-            const sent = onMove(move.from, move.to);
+            const sent = onMove(selectedSquare, square);
 
             if (sent) {
-                setPendingMove(move);
+                setPendingMove({
+                    from: selectedSquare,
+                    to: square,
+                });
                 setSelectedSquare(null);
-                setBoardMessage(null);
             }
 
             return;
@@ -144,7 +200,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // Click lại chính ô đang chọn để bỏ chọn.
         if (selectedSquare === square) {
             setSelectedSquare(null);
-            setBoardMessage(null);
             return;
         }
 
@@ -156,16 +211,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             (game.legalMoves[square]?.length ?? 0) > 0
         ) {
             setSelectedSquare(square);
-            setBoardMessage(null);
             return;
         }
 
         setSelectedSquare(null);
-        setBoardMessage(null);
     };
 
     return (
-        <div className="w-full min-w-0">
+        <div className="relative w-full min-w-0">
 
             {/* Chess board container */}
             <div
@@ -210,6 +263,27 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         const isCheckedKing =
                             checkedKingSquare === square;
 
+                        const isKing =
+                            piece?.type === 'KING';
+
+                        const kingAuraClass =
+                            isKing && isGameOver
+                                ? game.gameResult.winner === null
+                                    ? `
+                                        ring-4 ring-inset ring-amber-300
+                                        shadow-[inset_0_0_24px_rgba(251,191,36,0.65)]
+                                    `
+                                    : game.gameResult.winner === piece.color
+                                        ? `
+                                            ring-4 ring-inset ring-emerald-400
+                                            shadow-[inset_0_0_24px_rgba(52,211,153,0.75)]
+                                        `
+                                        : `
+                                            ring-4 ring-inset ring-red-500
+                                            shadow-[inset_0_0_24px_rgba(239,68,68,0.75)]
+                                        `
+                                : '';
+
                         const showFileLabel = row === 7;
                         const showRankLabel = column === 0;
 
@@ -245,6 +319,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                                         ? 'z-10 ring-4 ring-inset ring-red-500'
                                         : ''
                                 }
+                                    ${kingAuraClass}
                                 `}
                             >
                                 {isLastMoveSquare && (
@@ -325,48 +400,75 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 </div>
             </div>
 
-            {/* Board status */}
-            <div className="
-                mt-2 flex min-h-8 items-center justify-center
-                text-center text-sm
-            ">
-                {game.gameResult.status !== 'IN_PROGRESS' ? (
-                    <p className="text-slate-500">
-                        This game has finished.
-                    </p>
-                ) : socketError ? (
-                    <p className="text-red-300">
-                        {socketError}
-                    </p>
-                ) : !isConnected ? (
-                    <p className="text-slate-500">
-                        Connecting to game server...
-                    </p>
-                ) : !isPlayerTurn ? (
-                    <p className="text-slate-500">
-                        Waiting for your turn.
-                    </p>
-                ) : pendingMove ? (
-                    <p className="text-amber-300">
-                        Move sent: {pendingMove.from} → {pendingMove.to}
-                        <span className="mt-1 block text-xs text-slate-500">
-                            Waiting for server confirmation...
-                        </span>
-                    </p>
-                ) : boardMessage ? (
-                    <p className="text-amber-300">
-                        {boardMessage}
-                    </p>
-                ) : selectedSquare ? (
-                    <p className="text-emerald-300">
-                        Select a destination square.
-                    </p>
-                ) : (
-                    <p className="text-slate-500">
-                        Select one of your pieces to see legal moves.
-                    </p>
-                )}
-            </div>
+            {/* Promotion chooser */}
+            {pendingPromotion && (
+                <div
+                    className="
+                        absolute inset-0 z-30
+                        flex items-center justify-center
+                        rounded-lg bg-slate-950/75 p-3
+                        backdrop-blur-sm
+                    "
+                >
+                    <div className="
+                        w-full max-w-xs rounded-2xl
+                        border border-slate-700
+                        bg-slate-900 p-4
+                        shadow-2xl
+                    ">
+                        <h3 className="text-center text-base font-bold text-white">
+                            Choose promotion
+                        </h3>
+
+                        <p className="mt-1 text-center text-xs text-slate-400">
+                            Select the piece for your pawn.
+                        </p>
+
+                        <div className="mt-4 grid grid-cols-4 gap-2">
+                            {promotionOptions.map((option) => (
+                                <button
+                                    key={option.type}
+                                    type="button"
+                                    onClick={() => handlePromotion(option.type)}
+                                    className="
+                                        flex min-w-0 flex-col
+                                        items-center gap-1
+                                        rounded-xl border border-slate-700
+                                        bg-slate-950 p-2
+                                        transition
+                                        hover:border-emerald-400
+                                        hover:bg-slate-800
+                                    "
+                                >
+                                    <span className="flex h-11 w-11 items-center justify-center">
+                                        <ChessPiece
+                                            type={option.type}
+                                            color={pendingPromotion.color}
+                                        />
+                                    </span>
+
+                                    <span className="text-[10px] font-medium text-slate-300">
+                                        {option.label}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setPendingPromotion(null)}
+                            className="
+                                mt-3 w-full rounded-lg
+                                px-3 py-2 text-xs font-medium
+                                text-slate-400 transition
+                                hover:bg-slate-800 hover:text-white
+                            "
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

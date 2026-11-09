@@ -1,4 +1,9 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useState,
+} from 'react';
+
 import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
@@ -6,6 +11,8 @@ import {getGame} from '../services/gameApi';
 import {useGameSocket} from '../hooks/useGameSocket';
 
 import {AppHeader} from '../../../components/layout/AppHeader';
+import {useToast} from '../../../context/ToastContext';
+
 import {ChessBoard} from '../components/ChessBoard';
 import {GamePlayerCard} from '../components/GamePlayerCard';
 import {MoveHistoryPanel} from '../components/MoveHistoryPanel';
@@ -18,6 +25,7 @@ import {
 
 import type {
     GameStateResponse,
+    GameStatus,
     PieceColor,
 } from '../types/game';
 
@@ -38,13 +46,46 @@ const getErrorMessage = (error: unknown): string => {
     return 'Unable to load this game. Please try again.';
 };
 
+const getGameResultDescription = (status: GameStatus): string => {
+    switch (status) {
+        case 'CHECKMATE':
+            return 'The game ended by checkmate.';
+
+        case 'STALEMATE':
+            return 'The game ended in stalemate.';
+
+        case 'DRAW_INSUFFICIENT_MATERIAL':
+            return 'Neither player had enough material to checkmate.';
+
+        case 'DRAW_FIFTY_MOVE_RULE':
+            return 'The game ended by the fifty-move rule.';
+
+        case 'DRAW_THREEFOLD_REPETITION':
+            return 'The same position occurred three times.';
+
+        case 'DRAW_BY_AGREEMENT':
+            return 'Both players agreed to a draw.';
+
+        case 'RESIGNED':
+            return 'A player resigned.';
+
+        case 'TIMED_OUT':
+            return 'A player ran out of time.';
+
+        default:
+            return 'The game has ended.';
+    }
+};
+
 export const GamePage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
     const {user, logout, accessToken} = useAuth();
+    const {showError} = useToast();
 
     const [game, setGame] = useState<GameStateResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isResultModalOpen, setIsResultModalOpen] = useState(false);
 
     useEffect(() => {
         if (!gameId) {
@@ -86,7 +127,10 @@ export const GamePage: React.FC = () => {
     // Chỉ nhận broadcast thuộc đúng ván đấu đang mở.
     const handleGameState = useCallback((nextState: GameStateResponse) => {
         setGame((currentGame) => {
-            if (!currentGame || currentGame.gameId !== nextState.gameId) {
+            if (
+                !currentGame ||
+                currentGame.gameId !== nextState.gameId
+            ) {
                 return currentGame;
             }
 
@@ -94,7 +138,7 @@ export const GamePage: React.FC = () => {
         });
     }, []);
 
-    // Chỉ kết nối WebSocket sau khi REST đã tải được ván đấu.
+    // Chỉ kết nối WebSocket sau khi đã tải đúng game.
     const {
         isConnected,
         error: socketError,
@@ -102,9 +146,34 @@ export const GamePage: React.FC = () => {
     } = useGameSocket({
         accessToken,
         gameId: gameId ?? null,
-        enabled: Boolean(game && accessToken && gameId),
+        enabled: Boolean(
+            game &&
+            game.gameId === gameId &&
+            accessToken
+        ),
         onGameState: handleGameState,
     });
+
+    // Lỗi kết nối/gửi message được hiển thị bằng Toast.
+    useEffect(() => {
+        if (socketError) {
+            showError(socketError);
+        }
+    }, [socketError, showError]);
+
+    // Tự mở popup khi ván đấu kết thúc.
+    useEffect(() => {
+        if (!game) {
+            return;
+        }
+
+        setIsResultModalOpen(
+            game.gameResult.status !== 'IN_PROGRESS',
+        );
+    }, [
+        game?.gameId,
+        game?.gameResult.status,
+    ]);
 
     if (isLoading) {
         return (
@@ -170,7 +239,7 @@ export const GamePage: React.FC = () => {
         );
     }
 
-    // Resolve player colors
+    // Resolve player colors.
     const playerColor: PieceColor | null =
         user?.id === game.whitePlayerId
             ? 'WHITE'
@@ -185,7 +254,7 @@ export const GamePage: React.FC = () => {
                 ? 'WHITE'
                 : null;
 
-    // Resolve clocks
+    // Resolve clocks.
     const playerRemainingMs =
         playerColor === 'WHITE'
             ? game.whiteRemainingMs
@@ -200,7 +269,7 @@ export const GamePage: React.FC = () => {
                 ? game.blackRemainingMs
                 : null;
 
-    // Resolve captured pieces
+    // Resolve captured pieces.
     const playerCapturedPieces = getPiecesCapturedBy(
         playerColor,
         game.capturedWhitePieces,
@@ -213,7 +282,7 @@ export const GamePage: React.FC = () => {
         game.capturedBlackPieces,
     );
 
-    // Resolve material advantage
+    // Resolve material advantage.
     const playerMaterialAdvantage = getMaterialAdvantage(
         playerColor,
         game.capturedWhitePieces,
@@ -226,7 +295,7 @@ export const GamePage: React.FC = () => {
         game.capturedBlackPieces,
     );
 
-    // Active turn
+    // Active turn.
     const isGameInProgress =
         game.gameResult.status === 'IN_PROGRESS';
 
@@ -239,6 +308,27 @@ export const GamePage: React.FC = () => {
         isGameInProgress &&
         opponentColor !== null &&
         game.currentTurn === opponentColor;
+
+    // Result display.
+    const winner = game.gameResult.winner;
+
+    const didPlayerWin =
+        playerColor !== null &&
+        winner === playerColor;
+
+    const resultHeading =
+        winner === null
+            ? 'Game drawn'
+            : didPlayerWin
+                ? 'Congratulations!'
+                : 'Game over';
+
+    const resultSummary =
+        winner === null
+            ? 'The game ended in a draw.'
+            : didPlayerWin
+                ? 'You won this game!'
+                : 'You lost this game.';
 
     return (
         <div className="
@@ -289,9 +379,10 @@ export const GamePage: React.FC = () => {
                             />
 
                             <GameClock
+                                label="Opponent"
                                 remainingMs={opponentRemainingMs}
+                                turnStartTimeEpochMs={game.turnStartTimeEpochMs}
                                 isActive={isOpponentTurn}
-                                variant="compact"
                             />
                         </div>
 
@@ -318,15 +409,17 @@ export const GamePage: React.FC = () => {
                                 flex-col items-center justify-center gap-3
                             ">
                                 <GameClock
+                                    label="Opponent"
                                     remainingMs={opponentRemainingMs}
+                                    turnStartTimeEpochMs={game.turnStartTimeEpochMs}
                                     isActive={isOpponentTurn}
-                                    variant="panel"
                                 />
 
                                 <GameClock
+                                    label="You"
                                     remainingMs={playerRemainingMs}
+                                    turnStartTimeEpochMs={game.turnStartTimeEpochMs}
                                     isActive={isPlayerTurn}
-                                    variant="panel"
                                 />
                             </div>
 
@@ -368,9 +461,10 @@ export const GamePage: React.FC = () => {
                             />
 
                             <GameClock
+                                label="You"
                                 remainingMs={playerRemainingMs}
+                                turnStartTimeEpochMs={game.turnStartTimeEpochMs}
                                 isActive={isPlayerTurn}
-                                variant="compact"
                             />
                         </div>
 
@@ -390,6 +484,85 @@ export const GamePage: React.FC = () => {
                     </section>
                 </div>
             </main>
+
+            {/* Game result popup */}
+            {!isGameInProgress && isResultModalOpen && (
+                <div className="
+                    fixed inset-0 z-[100]
+                    flex items-center justify-center
+                    bg-black/70 p-4 backdrop-blur-sm
+                ">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="game-result-title"
+                        className="
+                            w-full max-w-sm rounded-2xl
+                            border border-slate-700
+                            bg-slate-900 p-6 text-center
+                            shadow-2xl shadow-black/50
+                        "
+                    >
+                        <div className="
+                            mx-auto flex h-16 w-16
+                            items-center justify-center
+                            rounded-2xl
+                            bg-emerald-400/10 text-3xl
+                        ">
+                            {winner === null ? '½' : didPlayerWin ? '🏆' : '♟'}
+                        </div>
+
+                        <h2
+                            id="game-result-title"
+                            className="mt-4 text-2xl font-bold text-white"
+                        >
+                            {resultHeading}
+                        </h2>
+
+                        <p className="mt-2 text-sm text-slate-300">
+                            {resultSummary}
+                        </p>
+
+                        <p className="mt-3 text-xs text-slate-500">
+                            {getGameResultDescription(game.gameResult.status)}
+                        </p>
+
+                        {winner && (
+                            <p className="mt-2 text-sm font-semibold text-emerald-300">
+                                {winner === 'WHITE' ? 'White' : 'Black'} wins
+                            </p>
+                        )}
+
+                        <div className="mt-6 flex flex-col gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsResultModalOpen(false)}
+                                className="
+                                    w-full rounded-xl
+                                    border border-slate-700
+                                    bg-slate-800 px-4 py-3
+                                    text-sm font-semibold text-white
+                                    transition hover:bg-slate-700
+                                "
+                            >
+                                View final position
+                            </button>
+
+                            <Link
+                                to="/home"
+                                className="
+                                    w-full rounded-xl
+                                    bg-emerald-300 px-4 py-3
+                                    text-sm font-bold text-slate-950
+                                    transition hover:bg-emerald-200
+                                "
+                            >
+                                Back to lobby
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

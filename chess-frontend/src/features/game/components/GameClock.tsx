@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
-import {formatTime} from '../utils/formatTime';
+import { formatTime } from '../utils/formatTime';
 
 interface GameClockProps {
     label: string;
     remainingMs: number | null;
+    turnStartTimeEpochMs: number | null;
     isActive: boolean;
     className?: string;
 }
@@ -12,16 +13,53 @@ interface GameClockProps {
 export const GameClock: React.FC<GameClockProps> = ({
                                                         label,
                                                         remainingMs,
+                                                        turnStartTimeEpochMs,
                                                         isActive,
                                                         className = '',
                                                     }) => {
-    const time = remainingMs === null
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        if (
+            !isActive ||
+            remainingMs === null ||
+            turnStartTimeEpochMs === null
+        ) {
+            return;
+        }
+
+        const updateTime = () => {
+            setNow(Date.now());
+        };
+
+        updateTime();
+
+        const intervalId = window.setInterval(updateTime, 250);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [isActive, remainingMs, turnStartTimeEpochMs]);
+
+    const elapsedMs =
+        isActive && turnStartTimeEpochMs !== null
+            ? Math.max(0, now - turnStartTimeEpochMs)
+            : 0;
+
+    const currentRemainingMs =
+        remainingMs === null || turnStartTimeEpochMs === null
+            ? null
+            : Math.max(0, remainingMs - elapsedMs);
+
+    const time = currentRemainingMs === null
         ? '—:—'
-        : formatTime(remainingMs);
+        : formatTime(currentRemainingMs);
 
     return (
         <div
             aria-label={`${label} clock: ${time}`}
+            role="timer"
+            aria-live="off"
             className={`
                 flex h-10 w-[84px] shrink-0
                 items-center justify-center
