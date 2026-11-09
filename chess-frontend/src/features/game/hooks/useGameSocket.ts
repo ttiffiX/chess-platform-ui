@@ -1,11 +1,22 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
+
 import type {Client} from '@stomp/stompjs';
 
-import type {GameStateResponse, PieceType} from '../types/game';
+import type {
+    GameStateResponse,
+    PieceType,
+} from '../types/game';
 
 import {
     createGameSocket,
+    sendGameAction,
     sendGameMove,
+    type GameAction,
 } from '../services/gameSocket';
 
 interface UseGameSocketParams {
@@ -23,6 +34,11 @@ interface UseGameSocketResult {
         to: string,
         promotionType?: PieceType,
     ) => boolean;
+    offerDraw: () => boolean;
+    acceptDraw: () => boolean;
+    declineDraw: () => boolean;
+    resign: () => boolean;
+    claimTimeout: () => boolean;
 }
 
 export const useGameSocket = ({
@@ -37,7 +53,6 @@ export const useGameSocket = ({
     const clientRef = useRef<Client | null>(null);
     const onGameStateRef = useRef(onGameState);
 
-    // Luôn sử dụng callback mới nhất mà không phải reconnect socket.
     onGameStateRef.current = onGameState;
 
     useEffect(() => {
@@ -78,8 +93,8 @@ export const useGameSocket = ({
                     if (!active) return;
 
                     setIsConnected(false);
-                    setError((current) =>
-                        current ?? 'Connection interrupted. Reconnecting...',
+                    setError(
+                        'Connection interrupted. Reconnecting...',
                     );
                 },
             },
@@ -134,9 +149,64 @@ export const useGameSocket = ({
         }
     }, [gameId]);
 
+    const sendAction = useCallback((
+        action: GameAction,
+    ): boolean => {
+        const client = clientRef.current;
+
+        if (!client?.connected || !gameId) {
+            setError('Game connection is not ready.');
+            return false;
+        }
+
+        try {
+            setError(null);
+            sendGameAction(client, gameId, action);
+            return true;
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : 'Unable to send game action.',
+            );
+
+            return false;
+        }
+    }, [gameId]);
+
+    const offerDraw = useCallback(
+        () => sendAction('offerDraw'),
+        [sendAction],
+    );
+
+    const acceptDraw = useCallback(
+        () => sendAction('acceptDraw'),
+        [sendAction],
+    );
+
+    const declineDraw = useCallback(
+        () => sendAction('declineDraw'),
+        [sendAction],
+    );
+
+    const resign = useCallback(
+        () => sendAction('resign'),
+        [sendAction],
+    );
+
+    const claimTimeout = useCallback(
+        () => sendAction('claimTimeout'),
+        [sendAction],
+    );
+
     return {
         isConnected,
         error,
         sendMove,
+        offerDraw,
+        acceptDraw,
+        declineDraw,
+        resign,
+        claimTimeout,
     };
 };

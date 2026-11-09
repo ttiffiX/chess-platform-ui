@@ -4,6 +4,13 @@ import SockJS from 'sockjs-client';
 import {WS_BASE_URL} from '../../../config/env';
 import type {GameStateResponse, PieceType} from '../types/game';
 
+export type GameAction =
+    | 'offerDraw'
+    | 'acceptDraw'
+    | 'declineDraw'
+    | 'resign'
+    | 'claimTimeout';
+
 interface GameSocketHandlers {
     onConnected: () => void;
     onGameState: (state: GameStateResponse) => void;
@@ -18,7 +25,9 @@ interface CreateGameSocketParams {
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value);
 
 const parseGameState = (
     message: IMessage,
@@ -45,24 +54,6 @@ const parseGameState = (
     }
 };
 
-const parseGameError = (message: IMessage): string => {
-    try {
-        const data: unknown = JSON.parse(message.body);
-
-        if (typeof data === 'string') {
-            return data;
-        }
-
-        if (isRecord(data) && typeof data.message === 'string') {
-            return data.message;
-        }
-    } catch {
-        // The server may send plain text.
-    }
-
-    return message.body.trim() || 'Unable to process your move.';
-};
-
 export const createGameSocket = ({
                                      accessToken,
                                      gameId,
@@ -76,14 +67,12 @@ export const createGameSocket = ({
             Authorization: `Bearer ${accessToken}`,
         },
 
-        // Tự kết nối lại nếu mạng tạm thời bị gián đoạn.
         reconnectDelay: 3000,
 
         heartbeatIncoming: 10_000,
         heartbeatOutgoing: 10_000,
 
         onConnect: () => {
-            // Nhận trạng thái ván đấu sau mỗi nước đi.
             client.subscribe(`/topic/game/${gameId}`, (message) => {
                 const gameState = parseGameState(message, gameId);
 
@@ -138,5 +127,28 @@ export const sendGameMove = (
             to,
             ...(promotionType ? {promotionType} : {}),
         }),
+    });
+};
+
+const ACTION_DESTINATIONS: Record<GameAction, string> = {
+    offerDraw: 'draw/offer',
+    acceptDraw: 'draw/accept',
+    declineDraw: 'draw/decline',
+    resign: 'resign',
+    claimTimeout: 'timeout',
+};
+
+export const sendGameAction = (
+    client: Client,
+    gameId: string,
+    action: GameAction,
+): void => {
+    if (!client.connected) {
+        throw new Error('WebSocket is not connected.');
+    }
+
+    client.publish({
+        destination: `/app/game/${gameId}/${ACTION_DESTINATIONS[action]}`,
+        body: '',
     });
 };

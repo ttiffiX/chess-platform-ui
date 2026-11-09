@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 import type {
@@ -5,18 +6,46 @@ import type {
     PieceColor,
 } from '../types/game';
 
-import {GameActionBar} from './GameActionBar';
+import { GameActionBar } from './GameActionBar';
 
 interface MoveHistoryPanelProps {
     historyItems: MoveHistoryDto[];
     fullMoveNumber: number;
     drawOfferedBy: PieceColor | null;
+    playerColor: PieceColor | null;
+
+    currentMoveIndex: number;
+    latestMoveIndex: number;
+    isReviewing: boolean;
+    isReviewLoading: boolean;
+
+    canUseGameActions: boolean;
+
+    onReviewIndex: (index: number) => void;
+    onReturnToLatest: () => void;
+
+    onOfferDraw: () => void;
+    onAcceptDraw: () => void;
+    onDeclineDraw: () => void;
+    onResign: () => void;
 }
 
 export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
                                                                       historyItems,
                                                                       fullMoveNumber,
                                                                       drawOfferedBy,
+                                                                      playerColor,
+                                                                      currentMoveIndex,
+                                                                      latestMoveIndex,
+                                                                      isReviewing,
+                                                                      isReviewLoading,
+                                                                      canUseGameActions,
+                                                                      onReviewIndex,
+                                                                      onReturnToLatest,
+                                                                      onOfferDraw,
+                                                                      onAcceptDraw,
+                                                                      onDeclineDraw,
+                                                                      onResign,
                                                                   }) => {
     return (
         <aside className="
@@ -26,18 +55,36 @@ export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
             bg-slate-900 p-3 sm:p-4
         ">
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between gap-2">
-                <h2 className="font-semibold">
-                    Move history
-                </h2>
+            <div className="
+                flex shrink-0 min-w-0
+                items-center justify-between gap-2
+            ">
+                <div className="min-w-0">
+                    <h2 className="truncate font-semibold">
+                        Move history
+                    </h2>
 
-                <span className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
+                    {isReviewing && (
+                        <p className="mt-0.5 text-[10px] text-amber-300">
+                            Reviewing previous position
+                        </p>
+                    )}
+                </div>
+
+                <span className="
+                    shrink-0 rounded-lg bg-slate-800
+                    px-3 py-1 text-xs font-medium text-slate-300
+                ">
                     Move {fullMoveNumber}
                 </span>
             </div>
 
             {drawOfferedBy && (
-                <p className="mt-3 shrink-0 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
+                <p className="
+                    mt-3 shrink-0 rounded-lg
+                    bg-amber-400/10 px-3 py-2
+                    text-xs text-amber-300
+                ">
                     {drawOfferedBy} has offered a draw.
                 </p>
             )}
@@ -56,30 +103,49 @@ export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
                     historyItems.map((move) => {
                         const moveNumber = Math.ceil(move.moveIndex / 2);
                         const isBlackMove = move.moveIndex % 2 === 0;
+
+                        const isSelected =
+                            currentMoveIndex === move.moveIndex;
+
                         const isLatestMove =
-                            move.moveIndex === historyItems[historyItems.length - 1].moveIndex;
+                            move.moveIndex === latestMoveIndex;
 
                         return (
-                            <div
+                            <button
                                 key={move.moveIndex}
+                                type="button"
+                                disabled={isReviewLoading}
+                                onClick={() => onReviewIndex(move.moveIndex)}
+                                aria-pressed={isSelected}
                                 className={`
-                                    flex items-center justify-between
-                                    gap-3 rounded-lg px-3 py-2
+                                    flex w-full min-w-0
+                                    items-center justify-between
+                                    gap-2 rounded-lg px-3 py-2
+                                    text-left transition
+                                    disabled:cursor-wait
                                     ${
-                                    isLatestMove
-                                        ? 'bg-emerald-400/10'
-                                        : 'bg-slate-950'
+                                    isSelected && isReviewing
+                                        ? 'bg-amber-400/15 ring-1 ring-amber-400/30'
+                                        : isLatestMove && !isReviewing
+                                            ? 'bg-emerald-400/10'
+                                            : 'bg-slate-950 hover:bg-slate-800'
                                 }
                                 `}
                             >
-                                <span className="shrink-0 font-mono text-xs text-slate-500">
+                                <span className="
+                                    shrink-0 font-mono
+                                    text-xs text-slate-500
+                                ">
                                     {moveNumber}{isBlackMove ? ' □' : ' ■'}
                                 </span>
 
-                                <span className="font-mono text-sm text-slate-200">
+                                <span className="
+                                    min-w-0 truncate text-right
+                                    font-mono text-sm text-slate-200
+                                ">
                                     {move.from} → {move.to}
                                 </span>
-                            </div>
+                            </button>
                         );
                     })
                 )}
@@ -87,7 +153,21 @@ export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
 
             {/* Controls */}
             <div className="mt-3 shrink-0">
-                <GameActionBar/>
+                <GameActionBar
+                    currentMoveIndex={currentMoveIndex}
+                    latestMoveIndex={latestMoveIndex}
+                    isReviewing={isReviewing}
+                    isReviewLoading={isReviewLoading}
+                    onReviewIndex={onReviewIndex}
+                    onReturnToLatest={onReturnToLatest}
+                    canUseGameActions={canUseGameActions}
+                    playerColor={playerColor}
+                    drawOfferedBy={drawOfferedBy}
+                    onOfferDraw={onOfferDraw}
+                    onAcceptDraw={onAcceptDraw}
+                    onDeclineDraw={onDeclineDraw}
+                    onResign={onResign}
+                />
             </div>
         </aside>
     );
