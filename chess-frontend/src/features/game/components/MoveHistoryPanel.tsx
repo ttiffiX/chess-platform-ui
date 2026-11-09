@@ -73,7 +73,7 @@ export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
                                 `}
                             >
                                 <span className="shrink-0 font-mono text-xs text-slate-500">
-                                    {moveNumber}{isBlackMove ? '...' : '.'}
+                                    {moveNumber}{isBlackMove ? ' □' : ' ■'}
                                 </span>
 
                                 <span className="font-mono text-sm text-slate-200">
