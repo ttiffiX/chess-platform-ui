@@ -34,3 +34,17 @@ export const getGameSnapshotAt = async (
 
     return response.data.data;
 };
+
+export const getActiveGameId = async (): Promise<string | null> => {
+    const response = await client.get<ApiResponse<string | null>>(
+        '/games/active',
+    );
+
+    if (!response.data.success) {
+        throw new Error(
+            response.data.message || 'Unable to check active game.',
+        );
+    }
+
+    return response.data.data ?? null;
+};
