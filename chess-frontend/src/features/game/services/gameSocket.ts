@@ -7,6 +7,7 @@ import {
 } from '../../../api/client';
 
 import {WS_BASE_URL} from '../../../config/env';
+import {parseWebSocketError} from '../../../utils/websocket';
 
 import type {
     GameStateResponse,
@@ -77,7 +78,6 @@ export const createGameSocket = ({
 
         connectHeaders: {},
 
-        // Lấy token mới nhất trước mỗi lần CONNECT/reconnect.
         beforeConnect: async () => {
             const fallbackToken = getApiAccessToken();
 
@@ -90,8 +90,6 @@ export const createGameSocket = ({
                     }
                     : {};
             } catch {
-                // Nếu refresh tạm thời thất bại, thử kết nối bằng
-                // token hiện tại. Lần reconnect tiếp theo sẽ thử refresh lại.
                 const token = getApiAccessToken() ?? fallbackToken;
 
                 client.connectHeaders = token
@@ -108,6 +106,7 @@ export const createGameSocket = ({
         heartbeatOutgoing: 10_000,
 
         onConnect: () => {
+            // Subscribe to game state.
             client.subscribe(`/topic/game/${gameId}`, (message) => {
                 const gameState = parseGameState(message, gameId);
 
@@ -119,6 +118,16 @@ export const createGameSocket = ({
                 }
 
                 handlers.onGameState(gameState);
+            });
+
+            // Subscribe to user-specific WebSocket errors.
+            client.subscribe('/user/queue/errors', (message) => {
+                const errorMessage = parseWebSocketError(message.body);
+
+                handlers.onError(
+                    errorMessage ??
+                    'An unexpected WebSocket error occurred.',
+                );
             });
 
             handlers.onConnected();
