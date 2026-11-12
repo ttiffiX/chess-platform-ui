@@ -2,20 +2,39 @@ import {client} from '../../../api/client';
 import type {ApiResponse} from '../../../types/api';
 import type {GameResponse} from '../types/game';
 
-export const getGame = async (
+// Chỉ gộp các request đang chạy đồng thời.
+// Không cache kết quả lâu dài vì trạng thái game luôn thay đổi.
+const pendingGameRequests = new Map<string, Promise<GameResponse>>();
+
+export const getGame = (
     gameId: string,
 ): Promise<GameResponse> => {
-    const response = await client.get<ApiResponse<GameResponse>>(
-        `/games/${gameId}`,
-    );
+    const existingRequest = pendingGameRequests.get(gameId);
 
-    if (!response.data.success || !response.data.data) {
-        throw new Error(
-            response.data.message || 'Unable to load game.',
-        );
+    if (existingRequest) {
+        return existingRequest;
     }
 
-    return response.data.data;
+    const request: Promise<GameResponse> = client
+        .get<ApiResponse<GameResponse>>(`/games/${gameId}`)
+        .then((response) => {
+            if (!response.data.success || !response.data.data) {
+                throw new Error(
+                    response.data.message || 'Unable to load game.',
+                );
+            }
+
+            return response.data.data;
+        })
+        .finally(() => {
+            if (pendingGameRequests.get(gameId) === request) {
+                pendingGameRequests.delete(gameId);
+            }
+        });
+
+    pendingGameRequests.set(gameId, request);
+
+    return request;
 };
 
 export const getActiveGameId = async (): Promise<string | null> => {

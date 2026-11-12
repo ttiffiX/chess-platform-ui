@@ -11,6 +11,7 @@ import {
     createMatchmakingSocket,
     sendCancelMatch,
     sendFindMatch,
+    sendGetMatchStatus,
 } from '../services/matchmakingSocket';
 
 interface UseMatchmakingResult {
@@ -39,6 +40,9 @@ export const useMatchmaking = (
 
     const disconnect = useCallback(async () => {
         const client = clientRef.current;
+
+        // Xóa ref trước khi deactivate để bỏ qua callback
+        // onDisconnected của client đã chủ động đóng.
         clientRef.current = null;
 
         if (client) {
@@ -60,51 +64,67 @@ export const useMatchmaking = (
         setError(message);
         updateStatus('ERROR');
 
-        const client = clientRef.current;
-        clientRef.current = null;
+        void disconnect();
+    }, [disconnect, updateStatus]);
 
-        if (client) {
-            void client.deactivate();
-        }
-    }, [updateStatus]);
-
-    const findMatch = useCallback((preset: MatchmakingPreset) => {
-        if (!accessToken || statusRef.current !== 'IDLE') {
+    /**
+     * Tạo kết nối mới.
+     *
+     * preset được truyền vào khi kết nối để tìm trận.
+     * Không truyền preset khi chỉ muốn hỏi trạng thái queue.
+     */
+    const connect = useCallback((
+        preset?: MatchmakingPreset,
+    ) => {
+        if (!accessToken) {
             return;
         }
 
-        setError(null);
-        setMatch(null);
-        updateStatus('CONNECTING');
+        let client: Client;
 
-        const client = createMatchmakingSocket({
+        client = createMatchmakingSocket({
             accessToken,
             handlers: {
                 onConnected: (connectedClient) => {
+                    if (clientRef.current !== client) {
+                        return;
+                    }
+
                     try {
-                        sendFindMatch(connectedClient, preset);
+                        if (preset) {
+                            sendFindMatch(connectedClient, preset);
+                        } else {
+                            sendGetMatchStatus(connectedClient);
+                        }
                     } catch (e) {
                         handleError(
                             e instanceof Error
                                 ? e.message
-                                : 'Unable to start matchmaking.',
+                                : 'Unable to communicate with matchmaking server.',
                         );
                     }
                 },
 
                 onStatus: (serverStatus) => {
+                    if (clientRef.current !== client) {
+                        return;
+                    }
+
                     switch (serverStatus) {
                         case 'SEARCHING':
-                            if (statusRef.current === 'CONNECTING') {
+                            if (statusRef.current !== 'CANCELLING') {
                                 updateStatus('SEARCHING');
                             }
                             break;
 
                         case 'CANCELLED':
                         case 'NOT_SEARCHING':
-                            if (statusRef.current === 'CANCELLING') {
+                            if (
+                                statusRef.current === 'CONNECTING' ||
+                                statusRef.current === 'SEARCHING' ||
+                                statusRef.current === 'CANCELLING'
+                            ) {
                                 updateStatus('IDLE');
-                                void disconnect();
                             }
                             break;
 
@@ -115,15 +135,28 @@ export const useMatchmaking = (
                 },
 
                 onMatchFound: (data) => {
+                    if (clientRef.current !== client) {
+                        return;
+                    }
+
                     setMatch(data);
                     setError(null);
                     updateStatus('MATCHED');
+
                     void disconnect();
                 },
 
-                onError: handleError,
+                onError: (message) => {
+                    if (clientRef.current === client) {
+                        handleError(message);
+                    }
+                },
 
                 onDisconnected: () => {
+                    if (clientRef.current !== client) {
+                        return;
+                    }
+
                     const current = statusRef.current;
 
                     if (
@@ -140,9 +173,74 @@ export const useMatchmaking = (
         });
 
         clientRef.current = client;
-        client.activate();
+        void client.activate();
     }, [
         accessToken,
+        disconnect,
+        handleError,
+        updateStatus,
+    ]);
+
+    /**
+     * Connect and restore queue status whenever the lobby mounts.
+     */
+    useEffect(() => {
+        if (!accessToken) {
+            updateStatus('IDLE');
+            setMatch(null);
+            setError(null);
+            return;
+        }
+
+        setError(null);
+        updateStatus('CONNECTING');
+
+        connect();
+
+        return () => {
+            const client = clientRef.current;
+            clientRef.current = null;
+
+            if (client) {
+                void client.deactivate();
+            }
+        };
+    }, [accessToken, connect, updateStatus]);
+
+    const findMatch = useCallback((preset: MatchmakingPreset) => {
+        if (!accessToken || statusRef.current !== 'IDLE') {
+            return;
+        }
+
+        setError(null);
+        setMatch(null);
+        updateStatus('CONNECTING');
+
+        const client = clientRef.current;
+
+        // Dùng lại kết nối đã được tạo khi kiểm tra queue.
+        if (client?.connected) {
+            try {
+                sendFindMatch(client, preset);
+            } catch (e) {
+                handleError(
+                    e instanceof Error
+                        ? e.message
+                        : 'Unable to start matchmaking.',
+                );
+            }
+
+            return;
+        }
+
+        // Nếu socket đã mất kết nối, tạo kết nối mới
+        // và gửi find request sau khi connect thành công.
+        void disconnect().then(() => {
+            connect(preset);
+        });
+    }, [
+        accessToken,
+        connect,
         disconnect,
         handleError,
         updateStatus,
@@ -183,19 +281,9 @@ export const useMatchmaking = (
         setMatch(null);
         setError(null);
         updateStatus('IDLE');
+
         void disconnect();
     }, [disconnect, updateStatus]);
-
-    useEffect(() => {
-        return () => {
-            const client = clientRef.current;
-            clientRef.current = null;
-
-            if (client) {
-                void client.deactivate();
-            }
-        };
-    }, []);
 
     return {
         status,

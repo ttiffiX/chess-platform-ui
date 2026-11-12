@@ -70,9 +70,6 @@ export const GamePage: React.FC = () => {
     // Snapshot review state, independent from live game state.
     const [reviewMoveIndex, setReviewMoveIndex] = useState<number | null>(null);
 
-    const [isReviewLoading, setIsReviewLoading] = useState(false);
-    const reviewRequestRef = useRef(0);
-
     // Prevent duplicate timeout requests for the same turn.
     const timeoutRequestRef = useRef<string | null>(null);
 

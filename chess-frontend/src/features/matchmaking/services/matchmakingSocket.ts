@@ -150,3 +150,14 @@ export const sendCancelMatch = (client: Client): void => {
         body: '',
     });
 };
+
+export const sendGetMatchStatus = (client: Client): void => {
+    if (!client.connected) {
+        throw new Error('WebSocket is not connected.');
+    }
+
+    client.publish({
+        destination: '/app/match/status',
+        body: '',
+    });
+};
