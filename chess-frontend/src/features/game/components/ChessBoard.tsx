@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 
 import type {
-    GameStateResponse,
+    GameViewState,
     PieceColor,
     PieceType,
 } from '../types/game';
@@ -9,7 +9,7 @@ import type {
 import {ChessPiece} from './ChessPiece';
 
 interface ChessBoardProps {
-    game: GameStateResponse;
+    game: GameViewState;
     moveIndex: number;
     playerColor: PieceColor | null;
     isConnected: boolean;

@@ -8,10 +8,7 @@ import React, {
 import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/context/AuthContext';
-import {
-    getGame,
-    getGameSnapshotAt,
-} from '../services/gameApi';
+import {getGame} from '../services/gameApi';
 
 import {useGameSocket} from '../hooks/useGameSocket';
 
@@ -30,16 +27,18 @@ import {
     getPiecesCapturedBy,
 } from '../utils/materialScore';
 
+import {
+    createGameViewState,
+    mergeGameResponse,
+} from '../utils/gameState';
+
+import {parseFen} from '../utils/fen';
+
 import type {
-    GameStateResponse,
+    GameResponse,
     GameStatus,
     PieceColor,
 } from '../types/game';
-
-interface ReviewState {
-    moveIndex: number;
-    snapshot: GameStateResponse;
-}
 
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
@@ -58,23 +57,18 @@ const getErrorMessage = (error: unknown): string => {
     return 'Unable to load this game. Please try again.';
 };
 
-const getResultDescription = (status: GameStatus): string => {
-    return getGameResultDescription(status);
-};
-
 export const GamePage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
     const {user, logout, accessToken} = useAuth();
     const {showError} = useToast();
 
-    const [game, setGame] = useState<GameStateResponse | null>(null);
+    const [game, setGame] = useState<GameResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
 
     // Snapshot review state, independent from live game state.
-    const [reviewState, setReviewState] =
-        useState<ReviewState | null>(null);
+    const [reviewMoveIndex, setReviewMoveIndex] = useState<number | null>(null);
 
     const [isReviewLoading, setIsReviewLoading] = useState(false);
     const reviewRequestRef = useRef(0);
@@ -99,7 +93,9 @@ export const GamePage: React.FC = () => {
                 const gameState = await getGame(gameId);
 
                 if (!cancelled) {
-                    setGame(gameState);
+                    setGame((currentGame) =>
+                        mergeGameResponse(currentGame, gameState),
+                    );
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -121,36 +117,15 @@ export const GamePage: React.FC = () => {
 
     // Reset review state when opening another game.
     useEffect(() => {
-        reviewRequestRef.current += 1;
-        setReviewState(null);
-        setIsReviewLoading(false);
+        setReviewMoveIndex(null);
     }, [gameId]);
 
     // Accept only newer game states.
     // For the same version, accept a newer server clock snapshot.
-    const handleGameState = useCallback((nextState: GameStateResponse) => {
-        setGame((currentGame) => {
-            if (
-                !currentGame ||
-                currentGame.gameId !== nextState.gameId
-            ) {
-                return currentGame;
-            }
-
-            if (nextState.stateVersion < currentGame.stateVersion) {
-                return currentGame;
-            }
-
-            if (
-                nextState.stateVersion === currentGame.stateVersion &&
-                (nextState.serverTimeEpochMs ?? 0) <=
-                (currentGame.serverTimeEpochMs ?? 0)
-            ) {
-                return currentGame;
-            }
-
-            return nextState;
-        });
+    const handleGameState = useCallback((nextState: GameResponse) => {
+        setGame((currentGame) =>
+            mergeGameResponse(currentGame, nextState),
+        );
     }, []);
 
     const {
@@ -206,12 +181,12 @@ export const GamePage: React.FC = () => {
     }, [socketError, showError]);
 
     // Load a historical position by backend moveIndex.
-    const handleReviewIndex = useCallback(async (moveIndex: number) => {
-        if (!gameId || !game) {
+    const handleReviewIndex = useCallback((moveIndex: number) => {
+        if (!game) {
             return;
         }
 
-        const latestMoveIndex = game.historyItems.length;
+        const latestMoveIndex = game.historyItems.length - 1;
 
         if (
             !Number.isInteger(moveIndex) ||
@@ -221,45 +196,16 @@ export const GamePage: React.FC = () => {
             return;
         }
 
-        // The latest index means return to the live game.
-        const requestId = ++reviewRequestRef.current;
-
-        if (moveIndex === latestMoveIndex) {
-            setReviewState(null);
-            setIsReviewLoading(false);
-            return;
-        }
-
-        setIsReviewLoading(true);
-
-        try {
-            const snapshot = await getGameSnapshotAt(
-                gameId,
-                moveIndex,
-            );
-
-            // Ignore older responses if the user navigated again.
-            if (requestId === reviewRequestRef.current) {
-                setReviewState({
-                    moveIndex,
-                    snapshot,
-                });
-            }
-        } catch (err) {
-            if (requestId === reviewRequestRef.current) {
-                showError(getErrorMessage(err));
-            }
-        } finally {
-            if (requestId === reviewRequestRef.current) {
-                setIsReviewLoading(false);
-            }
-        }
-    }, [gameId, game, showError]);
+        // Chọn vị trí mới nhất đồng nghĩa quay về live game.
+        setReviewMoveIndex(
+            moveIndex === latestMoveIndex
+                ? null
+                : moveIndex,
+        );
+    }, [game]);
 
     const handleReturnToLatest = useCallback(() => {
-        reviewRequestRef.current += 1;
-        setReviewState(null);
-        setIsReviewLoading(false);
+        setReviewMoveIndex(null);
     }, []);
 
     // Automatically ask the backend to claim timeout when the active
@@ -268,7 +214,7 @@ export const GamePage: React.FC = () => {
         game?.turnStartTimeEpochMs === null ||
         game?.turnStartTimeEpochMs === undefined
             ? null
-            : `${game.turnStartTimeEpochMs}:${game.currentTurn}`;
+            : `${game.turnStartTimeEpochMs}:${parseFen(game.fen).currentTurn}`;
 
     const handleClockExpired = useCallback((): boolean => {
         if (!timeoutTurnKey) {
@@ -366,15 +312,38 @@ export const GamePage: React.FC = () => {
         );
     }
 
-    // Live state is always kept separately from the review snapshot.
-    const isReviewing = reviewState !== null;
-    const displayGame = reviewState?.snapshot ?? game;
+    // -------------------------------------------------------------------------
+// Current / review position
+// -------------------------------------------------------------------------
 
-    const latestMoveIndex = game.historyItems.length;
+    const latestMoveIndex = Math.max(
+        0,
+        game.historyItems.length - 1,
+    );
+
+    const isReviewing = reviewMoveIndex !== null;
+
     const currentMoveIndex =
-        reviewState?.moveIndex ?? latestMoveIndex;
+        reviewMoveIndex ?? latestMoveIndex;
 
-    // Resolve player colors.
+// Build the current live state from the latest FEN.
+    const liveGame = createGameViewState(
+        game,
+        latestMoveIndex,
+        false,
+    );
+
+// Build the position currently displayed on the board.
+    const displayGame = createGameViewState(
+        game,
+        currentMoveIndex,
+        isReviewing,
+    );
+
+// -------------------------------------------------------------------------
+// Player colors
+// -------------------------------------------------------------------------
+
     const playerColor: PieceColor | null =
         user?.id === game.whitePlayerId
             ? 'WHITE'
@@ -389,7 +358,11 @@ export const GamePage: React.FC = () => {
                 ? 'WHITE'
                 : null;
 
-    // Resolve clocks using live state, even while reviewing history.
+// -------------------------------------------------------------------------
+// Clocks
+// -------------------------------------------------------------------------
+
+// Clock luôn lấy từ live game, kể cả khi đang review lịch sử.
     const playerRemainingMs =
         playerColor === 'WHITE'
             ? game.whiteRemainingMs
@@ -404,7 +377,11 @@ export const GamePage: React.FC = () => {
                 ? game.blackRemainingMs
                 : null;
 
-    // Resolve captured pieces from the currently displayed state.
+// -------------------------------------------------------------------------
+// Captured pieces
+// -------------------------------------------------------------------------
+
+// Captures được tính theo history đến vị trí đang xem.
     const playerCapturedPieces = getPiecesCapturedBy(
         playerColor,
         displayGame.capturedWhitePieces,
@@ -417,7 +394,10 @@ export const GamePage: React.FC = () => {
         displayGame.capturedBlackPieces,
     );
 
-    // Resolve material advantage from the currently displayed state.
+// -------------------------------------------------------------------------
+// Material advantage
+// -------------------------------------------------------------------------
+
     const playerMaterialAdvantage = getMaterialAdvantage(
         playerColor,
         displayGame.capturedWhitePieces,
@@ -430,21 +410,24 @@ export const GamePage: React.FC = () => {
         displayGame.capturedBlackPieces,
     );
 
-    // Active turn.
+// -------------------------------------------------------------------------
+// Active turn
+// -------------------------------------------------------------------------
+
     const isGameInProgress =
         game.gameResult.status === 'IN_PROGRESS';
 
     const isPlayerTurn =
         isGameInProgress &&
         playerColor !== null &&
-        game.currentTurn === playerColor;
+        liveGame.currentTurn === playerColor;
 
     const isOpponentTurn =
         isGameInProgress &&
         opponentColor !== null &&
-        game.currentTurn === opponentColor;
+        liveGame.currentTurn === opponentColor;
 
-    // Game actions are unavailable while reviewing a historical position.
+// Game actions are unavailable while reviewing history.
     const canUseGameActions =
         isConnected &&
         isGameInProgress &&
@@ -628,14 +611,14 @@ export const GamePage: React.FC = () => {
                             min-[951px]:min-h-0
                         ">
                             <MoveHistoryPanel
-                                historyItems={game.historyItems}
+                                historyItems={displayGame.historyItems}
                                 fullMoveNumber={displayGame.fullMoveNumber}
                                 drawOfferedBy={game.drawOfferedBy}
                                 playerColor={playerColor}
                                 currentMoveIndex={currentMoveIndex}
                                 latestMoveIndex={latestMoveIndex}
                                 isReviewing={isReviewing}
-                                isReviewLoading={isReviewLoading}
+                                isReviewLoading={false}
                                 canUseGameActions={canUseGameActions}
                                 onReviewIndex={handleReviewIndex}
                                 onReturnToLatest={handleReturnToLatest}
@@ -688,7 +671,7 @@ export const GamePage: React.FC = () => {
                         </p>
 
                         <p className="mt-3 text-xs text-slate-500">
-                            {getResultDescription(game.gameResult.status)}
+                            {getGameResultDescription(game.gameResult.status)}
                         </p>
 
                         {winner && (

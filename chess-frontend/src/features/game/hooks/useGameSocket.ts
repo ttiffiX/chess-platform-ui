@@ -9,7 +9,7 @@ import {
 import type { Client } from '@stomp/stompjs';
 
 import type {
-    GameStateResponse,
+    GameResponse,
     PieceType,
 } from '../types/game';
 
@@ -24,7 +24,7 @@ interface UseGameSocketParams {
     accessToken: string | null;
     gameId: string | null;
     enabled: boolean;
-    onGameState: (state: GameStateResponse) => void;
+    onGameState: (state: GameResponse) => void;
 }
 
 interface UseGameSocketResult {

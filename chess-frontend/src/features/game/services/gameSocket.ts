@@ -10,7 +10,7 @@ import {WS_BASE_URL} from '../../../config/env';
 import {parseWebSocketError} from '../../../utils/websocket';
 
 import type {
-    GameStateResponse,
+    GameResponse,
     PieceType,
 } from '../types/game';
 
@@ -23,7 +23,7 @@ export type GameAction =
 
 interface GameSocketHandlers {
     onConnected: () => void;
-    onGameState: (state: GameStateResponse) => void;
+    onGameState: (state: GameResponse) => void;
     onError: (message: string) => void;
     onDisconnected: () => void;
 }
@@ -38,10 +38,76 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null &&
     !Array.isArray(value);
 
-const parseGameState = (
+const isPieceDto = (value: unknown): boolean => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        ['KING', 'QUEEN', 'ROOK', 'BISHOP', 'KNIGHT', 'PAWN']
+            .includes(String(value.type)) &&
+        ['WHITE', 'BLACK'].includes(String(value.color))
+    );
+};
+
+const isPositionDto = (value: unknown): boolean => {
+    return (
+        isRecord(value) &&
+        typeof value.file === 'string' &&
+        /^[a-h]$/.test(value.file) &&
+        typeof value.rank === 'number' &&
+        Number.isInteger(value.rank) &&
+        value.rank >= 1 &&
+        value.rank <= 8
+    );
+};
+
+const isMoveDto = (value: unknown): boolean => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        isPositionDto(value.from) &&
+        isPositionDto(value.to) &&
+        (
+            value.promotedPiece == null ||
+            isPieceDto(value.promotedPiece)
+        )
+    );
+};
+
+const isGameHistoryRecord = (value: unknown): boolean => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        typeof value.fen === 'string' &&
+        typeof value.inCheck === 'boolean' &&
+        (
+            value.move == null ||
+            isMoveDto(value.move)
+        ) &&
+        (
+            value.capturedPiece == null ||
+            isPieceDto(value.capturedPiece)
+        ) &&
+        (
+            value.moverClockAfterMs == null ||
+            typeof value.moverClockAfterMs === 'number'
+        )
+    );
+};
+
+const isNullableNumber = (value: unknown): boolean => {
+    return value === null || typeof value === 'number';
+};
+
+const parseGameResponse = (
     message: IMessage,
     expectedGameId: string,
-): GameStateResponse | null => {
+): GameResponse | null => {
     try {
         const data: unknown = JSON.parse(message.body);
 
@@ -49,20 +115,34 @@ const parseGameState = (
             !isRecord(data) ||
             data.gameId !== expectedGameId ||
             !isRecord(data.gameResult) ||
-            !isRecord(data.board) ||
+            typeof data.gameResult.status !== 'string' ||
+            !(
+                data.gameResult.winner === null ||
+                ['WHITE', 'BLACK'].includes(String(data.gameResult.winner))
+            ) ||
+            typeof data.inCheck !== 'boolean' ||
+            typeof data.fen !== 'string' ||
             !isRecord(data.legalMoves) ||
             !Array.isArray(data.historyItems) ||
-            !Array.isArray(data.capturedWhitePieces) ||
-            !Array.isArray(data.capturedBlackPieces) ||
+            !data.historyItems.every(isGameHistoryRecord) ||
+            !isNullableNumber(data.whiteRemainingMs) ||
+            !isNullableNumber(data.blackRemainingMs) ||
+            !isNullableNumber(data.turnStartTimeEpochMs) ||
+            typeof data.serverTimeEpochMs !== 'number' ||
+            typeof data.whitePlayerId !== 'string' ||
+            typeof data.blackPlayerId !== 'string' ||
+            !(
+                data.drawOfferedBy === null ||
+                ['WHITE', 'BLACK'].includes(String(data.drawOfferedBy))
+            ) ||
             typeof data.stateVersion !== 'number' ||
             !Number.isInteger(data.stateVersion) ||
-            typeof data.serverTimeEpochMs !== 'number' ||
-            !['WHITE', 'BLACK'].includes(String(data.currentTurn))
+            typeof data.createdAt !== 'string'
         ) {
             return null;
         }
 
-        return data as unknown as GameStateResponse;
+        return data as unknown as GameResponse;
     } catch {
         return null;
     }
@@ -108,7 +188,7 @@ export const createGameSocket = ({
         onConnect: () => {
             // Subscribe to game state.
             client.subscribe(`/topic/game/${gameId}`, (message) => {
-                const gameState = parseGameState(message, gameId);
+                const gameState = parseGameResponse(message, gameId);
 
                 if (!gameState) {
                     handlers.onError(
