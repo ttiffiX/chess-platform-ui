@@ -29,13 +29,16 @@ import {
 
 import {
     createGameViewState,
+    mergeGameEventResponse,
     mergeGameResponse,
+    mergeGameUpdateResponse,
 } from '../utils/gameState';
 
 import {parseFen} from '../utils/fen';
 
 import type {
     GameResponse,
+    GameSocketMessage,
     GameStatus,
     PieceColor,
 } from '../types/game';
@@ -119,10 +122,32 @@ export const GamePage: React.FC = () => {
 
     // Accept only newer game states.
     // For the same version, accept a newer server clock snapshot.
-    const handleGameState = useCallback((nextState: GameResponse) => {
+    // REST always returns the complete GameResponse.
+    const handleRestGameState = useCallback((nextState: GameResponse) => {
         setGame((currentGame) =>
             mergeGameResponse(currentGame, nextState),
         );
+    }, []);
+
+// WebSocket can return either GameUpdateResponse or GameEventResponse.
+    const handleGameMessage = useCallback((message: GameSocketMessage) => {
+        setGame((currentGame) => {
+            if (!currentGame) {
+                return currentGame;
+            }
+
+            if ('historyItems' in message) {
+                return mergeGameUpdateResponse(
+                    currentGame,
+                    message,
+                );
+            }
+
+            return mergeGameEventResponse(
+                currentGame,
+                message,
+            );
+        });
     }, []);
 
     const {
@@ -142,7 +167,7 @@ export const GamePage: React.FC = () => {
             game.gameId === gameId &&
             accessToken
         ),
-        onGameState: handleGameState,
+        onGameMessage: handleGameMessage,
     });
 
     // Resync from REST after initial connection and every reconnect.
@@ -158,7 +183,7 @@ export const GamePage: React.FC = () => {
         void getGame(gameId)
             .then((latestState) => {
                 if (!cancelled) {
-                    handleGameState(latestState);
+                    handleRestGameState(latestState);
                 }
             })
             .catch(() => {
@@ -168,7 +193,7 @@ export const GamePage: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [isConnected, gameId, handleGameState]);
+    }, [isConnected, gameId, handleRestGameState]);
 
     // Show WebSocket errors through existing toast system.
     useEffect(() => {

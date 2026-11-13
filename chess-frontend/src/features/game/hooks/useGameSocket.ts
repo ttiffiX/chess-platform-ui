@@ -1,4 +1,3 @@
-
 import {
     useCallback,
     useEffect,
@@ -6,10 +5,10 @@ import {
     useState,
 } from 'react';
 
-import type { Client } from '@stomp/stompjs';
+import type {Client} from '@stomp/stompjs';
 
 import type {
-    GameResponse,
+    GameSocketMessage,
     PieceType,
 } from '../types/game';
 
@@ -24,7 +23,7 @@ interface UseGameSocketParams {
     accessToken: string | null;
     gameId: string | null;
     enabled: boolean;
-    onGameState: (state: GameResponse) => void;
+    onGameMessage: (message: GameSocketMessage) => void;
 }
 
 interface UseGameSocketResult {
@@ -48,17 +47,17 @@ export const useGameSocket = ({
                                   accessToken,
                                   gameId,
                                   enabled,
-                                  onGameState,
+                                  onGameMessage,
                               }: UseGameSocketParams): UseGameSocketResult => {
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const clientRef = useRef<Client | null>(null);
 
-    const onGameStateRef = useRef(onGameState);
+    const onGameMessageRef = useRef(onGameMessage);
     const accessTokenRef = useRef(accessToken);
 
-    onGameStateRef.current = onGameState;
+    onGameMessageRef.current = onGameMessage;
     accessTokenRef.current = accessToken;
 
     useEffect(() => {
@@ -86,10 +85,10 @@ export const useGameSocket = ({
                     setError(null);
                 },
 
-                onGameState: (state) => {
+                onGameMessage: (message) => {
                     if (!active) return;
 
-                    onGameStateRef.current(state);
+                    onGameMessageRef.current(message);
                 },
 
                 onError: (message) => {

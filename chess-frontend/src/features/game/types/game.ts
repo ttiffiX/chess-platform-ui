@@ -24,38 +24,27 @@ export interface PieceDto {
     color: PieceColor;
 }
 
-/**
- * Java Position record:
- * Position(char file, int rank)
- *
- * JSON:
- * { "file": "e", "rank": 2 }
- */
-export interface PositionDto {
-    file: string;
-    rank: number;
-}
-
-/**
- * Java Move record:
- * Move(Position from, Position to, Piece promotedPiece)
- */
-export interface MoveDto {
-    from: PositionDto;
-    to: PositionDto;
-    promotedPiece: PieceDto | null;
-}
-
-/**
- * Java Record stored in GameSession.history.
- *
- * The first record represents the initial position:
- * move === null
- */
 export interface GameHistoryRecordDto {
-    move: MoveDto | null;
+    /**
+     * UCI format:
+     * e2e4
+     * e7e8q (promotion)
+     *
+     * null represents the initial position.
+     */
+    move: string | null;
+
     fen: string;
-    capturedPiece: PieceDto | null;
+
+    /**
+     * FEN-style piece symbol:
+     * Q = white queen
+     * q = black queen
+     *
+     * Backend omits this property when null.
+     */
+    capturedPiece?: string | null;
+
     inCheck: boolean;
     moverClockAfterMs: number | null;
 }
@@ -72,13 +61,9 @@ export interface GameResult {
 }
 
 /**
- * Response returned by REST and WebSocket.
+ * REST GET /games/{gameId}
  *
- * REST getGame():
- * historyItems contains the full history.
- *
- * WebSocket:
- * historyItems contains only the latest history record.
+ * Contains the complete game state and full history.
  */
 export interface GameResponse {
     gameId: string;
@@ -105,13 +90,52 @@ export interface GameResponse {
 }
 
 /**
- * UI view model.
+ * WebSocket response after makeMove.
+ *
+ * historyItems contains only the latest Record,
+ * not the complete history.
+ */
+export interface GameUpdateResponse {
+    gameId: string;
+    gameResult: GameResult;
+    inCheck: boolean;
+    fen: string;
+
+    historyItems: GameHistoryRecordDto;
+    legalMoves: Record<string, string[]>;
+
+    whiteRemainingMs: number | null;
+    blackRemainingMs: number | null;
+
+    turnStartTimeEpochMs: number | null;
+    serverTimeEpochMs: number;
+
+    stateVersion: number;
+}
+
+/**
+ * WebSocket response for game actions:
+ * resign, offerDraw, acceptDraw, declineDraw, claimTimeout.
+ *
+ * Backend may omit drawOfferedBy when its value is null.
+ * The WebSocket parser normalizes omitted values to null.
+ */
+export interface GameEventResponse {
+    gameId: string;
+    gameResult: GameResult;
+    drawOfferedBy: PieceColor | null;
+    stateVersion: number;
+}
+
+export type GameSocketMessage =
+    | GameUpdateResponse
+    | GameEventResponse;
+
+/**
+ * Frontend view model.
  *
  * This is not a backend DTO.
  * It is built from GameResponse + FEN + history.
- *
- * Keeping this shape allows ChessBoard and existing UI components
- * to remain mostly unchanged.
  */
 export interface GameViewState {
     gameId: string;

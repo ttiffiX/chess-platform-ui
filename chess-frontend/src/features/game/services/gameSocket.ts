@@ -10,7 +10,8 @@ import {WS_BASE_URL} from '../../../config/env';
 import {parseWebSocketError} from '../../../utils/websocket';
 
 import type {
-    GameResponse,
+    GameResult,
+    GameSocketMessage,
     PieceType,
 } from '../types/game';
 
@@ -23,7 +24,7 @@ export type GameAction =
 
 interface GameSocketHandlers {
     onConnected: () => void;
-    onGameState: (state: GameResponse) => void;
+    onGameMessage: (message: GameSocketMessage) => void;
     onError: (message: string) => void;
     onDisconnected: () => void;
 }
@@ -38,43 +39,43 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null &&
     !Array.isArray(value);
 
-const isPieceDto = (value: unknown): boolean => {
-    if (!isRecord(value)) {
+const GAME_STATUSES = [
+    'IN_PROGRESS',
+    'CHECKMATE',
+    'STALEMATE',
+    'DRAW_INSUFFICIENT_MATERIAL',
+    'DRAW_FIFTY_MOVE_RULE',
+    'DRAW_THREEFOLD_REPETITION',
+    'DRAW_BY_AGREEMENT',
+    'RESIGNED',
+    'TIMED_OUT',
+];
+
+const isGameResult = (value: unknown): value is GameResult => {
+    if (
+        !isRecord(value) ||
+        !GAME_STATUSES.includes(String(value.status))
+    ) {
         return false;
     }
 
     return (
-        ['KING', 'QUEEN', 'ROOK', 'BISHOP', 'KNIGHT', 'PAWN']
-            .includes(String(value.type)) &&
-        ['WHITE', 'BLACK'].includes(String(value.color))
+        value.winner == null ||
+        value.winner === 'WHITE' ||
+        value.winner === 'BLACK'
     );
 };
 
-const isPositionDto = (value: unknown): boolean => {
-    return (
-        isRecord(value) &&
-        typeof value.file === 'string' &&
-        /^[a-h]$/.test(value.file) &&
-        typeof value.rank === 'number' &&
-        Number.isInteger(value.rank) &&
-        value.rank >= 1 &&
-        value.rank <= 8
-    );
+const isNullableNumber = (value: unknown): boolean => {
+    return value === null || typeof value === 'number';
 };
 
-const isMoveDto = (value: unknown): boolean => {
-    if (!isRecord(value)) {
-        return false;
-    }
+const isValidUciMove = (value: string): boolean => {
+    return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value);
+};
 
-    return (
-        isPositionDto(value.from) &&
-        isPositionDto(value.to) &&
-        (
-            value.promotedPiece == null ||
-            isPieceDto(value.promotedPiece)
-        )
-    );
+const isValidCapturedPieceSymbol = (value: string): boolean => {
+    return /^[KQRBNPkqrbnp]$/.test(value);
 };
 
 const isGameHistoryRecord = (value: unknown): boolean => {
@@ -87,11 +88,17 @@ const isGameHistoryRecord = (value: unknown): boolean => {
         typeof value.inCheck === 'boolean' &&
         (
             value.move == null ||
-            isMoveDto(value.move)
+            (
+                typeof value.move === 'string' &&
+                isValidUciMove(value.move)
+            )
         ) &&
         (
             value.capturedPiece == null ||
-            isPieceDto(value.capturedPiece)
+            (
+                typeof value.capturedPiece === 'string' &&
+                isValidCapturedPieceSymbol(value.capturedPiece)
+            )
         ) &&
         (
             value.moverClockAfterMs == null ||
@@ -100,49 +107,105 @@ const isGameHistoryRecord = (value: unknown): boolean => {
     );
 };
 
-const isNullableNumber = (value: unknown): boolean => {
-    return value === null || typeof value === 'number';
+const isValidCommonResponse = (
+    data: Record<string, unknown>,
+    expectedGameId: string,
+): boolean => {
+    return (
+        data.gameId === expectedGameId &&
+        isGameResult(data.gameResult) &&
+        typeof data.stateVersion === 'number' &&
+        Number.isInteger(data.stateVersion)
+    );
 };
 
-const parseGameResponse = (
+/**
+ * GameUpdateResponse:
+ * - has FEN and legal moves
+ * - historyItems is a single Record
+ * - has clock information
+ */
+const isGameUpdateResponse = (
+    data: Record<string, unknown>,
+    expectedGameId: string,
+): boolean => {
+    return (
+        isValidCommonResponse(data, expectedGameId) &&
+        typeof data.inCheck === 'boolean' &&
+        typeof data.fen === 'string' &&
+        isRecord(data.historyItems) &&
+        isGameHistoryRecord(data.historyItems) &&
+        isRecord(data.legalMoves) &&
+        isNullableNumber(data.whiteRemainingMs) &&
+        isNullableNumber(data.blackRemainingMs) &&
+        isNullableNumber(data.turnStartTimeEpochMs) &&
+        typeof data.serverTimeEpochMs === 'number'
+    );
+};
+
+/**
+ * GameEventResponse:
+ * - no FEN
+ * - no history
+ * - no clock information
+ * - drawOfferedBy may be omitted when null
+ */
+const isGameEventResponse = (
+    data: Record<string, unknown>,
+    expectedGameId: string,
+): boolean => {
+    return (
+        isValidCommonResponse(data, expectedGameId) &&
+        !('historyItems' in data) &&
+        !('fen' in data) &&
+        (
+            data.drawOfferedBy == null ||
+            data.drawOfferedBy === 'WHITE' ||
+            data.drawOfferedBy === 'BLACK'
+        )
+    );
+};
+
+/**
+ * Parse either GameUpdateResponse or GameEventResponse.
+ *
+ * The parser normalizes omitted drawOfferedBy to null.
+ */
+const parseGameSocketMessage = (
     message: IMessage,
     expectedGameId: string,
-): GameResponse | null => {
+): GameSocketMessage | null => {
     try {
         const data: unknown = JSON.parse(message.body);
 
         if (
             !isRecord(data) ||
-            data.gameId !== expectedGameId ||
-            !isRecord(data.gameResult) ||
-            typeof data.gameResult.status !== 'string' ||
-            !(
-                data.gameResult.winner === null ||
-                ['WHITE', 'BLACK'].includes(String(data.gameResult.winner))
-            ) ||
-            typeof data.inCheck !== 'boolean' ||
-            typeof data.fen !== 'string' ||
-            !isRecord(data.legalMoves) ||
-            !Array.isArray(data.historyItems) ||
-            !data.historyItems.every(isGameHistoryRecord) ||
-            !isNullableNumber(data.whiteRemainingMs) ||
-            !isNullableNumber(data.blackRemainingMs) ||
-            !isNullableNumber(data.turnStartTimeEpochMs) ||
-            typeof data.serverTimeEpochMs !== 'number' ||
-            typeof data.whitePlayerId !== 'string' ||
-            typeof data.blackPlayerId !== 'string' ||
-            !(
-                data.drawOfferedBy === null ||
-                ['WHITE', 'BLACK'].includes(String(data.drawOfferedBy))
-            ) ||
-            typeof data.stateVersion !== 'number' ||
-            !Number.isInteger(data.stateVersion) ||
-            typeof data.createdAt !== 'string'
+            data.gameId !== expectedGameId
         ) {
             return null;
         }
 
-        return data as unknown as GameResponse;
+        if (isGameUpdateResponse(data, expectedGameId)) {
+            return data as unknown as GameSocketMessage;
+        }
+
+        if (isGameEventResponse(data, expectedGameId)) {
+            return {
+                gameId: data.gameId as string,
+                gameResult: data.gameResult as GameResult,
+
+                drawOfferedBy:
+                    data.drawOfferedBy === 'WHITE'
+                        ? 'WHITE'
+                        : data.drawOfferedBy === 'BLACK'
+                            ? 'BLACK'
+                            : null,
+
+                stateVersion: data.stateVersion as number,
+            };
+        }
+
+        return null;
     } catch {
         return null;
     }
@@ -186,18 +249,21 @@ export const createGameSocket = ({
         heartbeatOutgoing: 10_000,
 
         onConnect: () => {
-            // Subscribe to game state.
+            // Subscribe to game updates and events.
             client.subscribe(`/topic/game/${gameId}`, (message) => {
-                const gameState = parseGameResponse(message, gameId);
+                const gameMessage = parseGameSocketMessage(
+                    message,
+                    gameId,
+                );
 
-                if (!gameState) {
+                if (!gameMessage) {
                     handlers.onError(
-                        'Invalid game state received from server.',
+                        'Invalid game update received from server.',
                     );
                     return;
                 }
 
-                handlers.onGameState(gameState);
+                handlers.onGameMessage(gameMessage);
             });
 
             // Subscribe to user-specific WebSocket errors.
