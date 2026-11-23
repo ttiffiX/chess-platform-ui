@@ -3,7 +3,7 @@ import React, {useState} from 'react';
 import type {
     GameViewState,
     PieceColor,
-    PieceType,
+    PieceType, PromotionPieceType,
 } from '../types/game';
 
 import {ChessPiece} from './ChessPiece';
@@ -30,11 +30,6 @@ interface PendingPromotion {
     to: string;
     color: PieceColor;
 }
-
-type PromotionPieceType = Extract<
-    PieceType,
-    'QUEEN' | 'ROOK' | 'BISHOP' | 'KNIGHT'
->;
 
 const promotionOptions: {
     type: PromotionPieceType;

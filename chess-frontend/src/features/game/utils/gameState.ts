@@ -7,19 +7,9 @@ import type {
     GameViewState,
     MoveHistoryDto,
     PieceDto,
-    PieceType,
 } from '../types/game';
 
-import {parseFen} from './fen';
-
-const PIECE_TYPE_BY_SYMBOL: Record<string, PieceType> = {
-    k: 'KING',
-    q: 'QUEEN',
-    r: 'ROOK',
-    b: 'BISHOP',
-    n: 'KNIGHT',
-    p: 'PAWN',
-};
+import {parseFen, PIECE_TYPES} from './fen';
 
 /**
  * Generate a stable key for a history record.
@@ -250,7 +240,7 @@ export interface CapturedPiecesByColor {
 const toCapturedPieceDto = (
     symbol: string,
 ): PieceDto | null => {
-    const type = PIECE_TYPE_BY_SYMBOL[symbol.toLowerCase()];
+    const type = PIECE_TYPES[symbol.toLowerCase()];
 
     if (!type) {
         return null;

@@ -10,7 +10,7 @@ export interface ParsedFen {
     fullMoveNumber: number;
 }
 
-const PIECE_TYPES: Record<string, PieceType> = {
+export const PIECE_TYPES: Record<string, PieceType> = {
     k: 'KING',
     q: 'QUEEN',
     r: 'ROOK',

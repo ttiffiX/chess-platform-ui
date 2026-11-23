@@ -19,6 +19,11 @@ export type PieceType =
     | 'KNIGHT'
     | 'PAWN';
 
+export type PromotionPieceType = Extract<
+    PieceType,
+    'QUEEN' | 'ROOK' | 'BISHOP' | 'KNIGHT'
+>;
+
 export interface PieceDto {
     type: PieceType;
     color: PieceColor;
