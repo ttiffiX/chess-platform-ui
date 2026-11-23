@@ -13,7 +13,7 @@ import {getGame} from '../services/gameApi';
 import {useGameSocket} from '../hooks/useGameSocket';
 
 import {AppHeader} from '../../../components/layout/AppHeader';
-import {useToast} from '../../../context/ToastContext';
+import {useToast} from '../../../shared/notifications/hooks/useToast';
 
 import {ChessBoard} from '../components/ChessBoard';
 import {GamePlayerCard} from '../components/GamePlayerCard';
@@ -32,7 +32,7 @@ import {
     mergeGameEventResponse,
     mergeGameResponse,
     mergeGameUpdateResponse,
-} from '../utils/gameState';
+} from '../utils/gameState.ts';
 
 import {parseFen} from '../utils/fen';
 

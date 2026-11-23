@@ -4,7 +4,7 @@ import axios, {
 } from 'axios';
 
 import {API_BASE_URL} from '../config/env';
-import {globalShowToast} from '../context/ToastContext';
+import {publishToast} from '../shared/notifications/services/toastEventBus';
 import type {ApiResponse} from '../types/api';
 
 let currentAccessToken: string | null = null;
@@ -222,10 +222,10 @@ client.interceptors.response.use(
                     return client.request(originalRequest);
                 }
             } catch {
-                globalShowToast?.(
-                    'Unable to renew your session. Please try again.',
-                    'error',
-                );
+                publishToast({
+                    message: 'Unable to renew your session. Please try again.',
+                    type: 'error',
+                });
 
                 return Promise.reject(
                     resData ?? {
@@ -243,7 +243,10 @@ client.interceptors.response.use(
             status !== 401 ||
             wasAlreadyRetried
         ) {
-            globalShowToast?.(errorMessage, 'error');
+            publishToast({
+                message: errorMessage,
+                type: 'error',
+            });
         }
 
         return Promise.reject(
