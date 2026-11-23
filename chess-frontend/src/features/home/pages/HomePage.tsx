@@ -1,4 +1,4 @@
-import {React, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 
 import {useAuth} from '../../auth/hooks/useAuth';
@@ -8,12 +8,36 @@ import {getDisplayName} from '../../../utils/user';
 import {useMatchmaking} from '../../matchmaking/hooks/useMatchmaking';
 import {getActiveGameId} from '../../game/services/gameApi';
 
+interface ActiveGameCheckState {
+    userId: string | null;
+    activeGameId: string | null;
+}
+
 export const HomePage: React.FC = () => {
     const {user, logout, accessToken} = useAuth();
     const navigate = useNavigate();
 
-    const [activeGameId, setActiveGameId] = useState<string | null>(null);
-    const [isCheckingActiveGame, setIsCheckingActiveGame] = useState(true);
+    const [activeGameCheck, setActiveGameCheck] =
+        useState<ActiveGameCheckState>({
+            userId: null,
+            activeGameId: null,
+        });
+
+    const userId = user?.id ?? null;
+
+    // Only use the result belonging to the currently authenticated user.
+    const isCheckingActiveGame =
+        Boolean(accessToken) &&
+        (
+            !userId ||
+            activeGameCheck.userId !== userId
+        );
+
+    const activeGameId =
+        accessToken &&
+        activeGameCheck.userId === userId
+            ? activeGameCheck.activeGameId
+            : null;
 
     const {
         status,
@@ -27,40 +51,43 @@ export const HomePage: React.FC = () => {
     const displayName = getDisplayName(user);
 
     // Check whether the player has an unfinished game.
-    // Do not automatically navigate away from Home.
+    // Keep the previous result while revalidating the same user.
     useEffect(() => {
+        if (!accessToken || !userId) {
+            return;
+        }
+
         let cancelled = false;
 
         const checkActiveGame = async () => {
-            setIsCheckingActiveGame(true);
-            setActiveGameId(null);
-
             try {
                 const gameId = await getActiveGameId();
 
                 if (!cancelled) {
-                    setActiveGameId(gameId);
+                    setActiveGameCheck({
+                        userId,
+                        activeGameId: gameId,
+                    });
                 }
             } catch {
                 // Allow the user to continue to the lobby.
                 // HTTP errors are handled by the shared Axios interceptor.
-            } finally {
+
                 if (!cancelled) {
-                    setIsCheckingActiveGame(false);
+                    setActiveGameCheck({
+                        userId,
+                        activeGameId: null,
+                    });
                 }
             }
         };
 
-        if (accessToken) {
-            void checkActiveGame();
-        } else {
-            setIsCheckingActiveGame(false);
-        }
+        void checkActiveGame();
 
         return () => {
             cancelled = true;
         };
-    }, [accessToken]);
+    }, [accessToken, userId]);
 
     // Navigate only when a new match is found.
     useEffect(() => {
@@ -209,13 +236,17 @@ export const HomePage: React.FC = () => {
                             </div>
 
                             <div className="mt-5 border-t border-slate-800 pt-4">
-                                <p className="text-xs text-slate-500">Player</p>
+                                <p className="text-xs text-slate-500">
+                                    Player
+                                </p>
 
                                 <p className="mt-1 break-all text-sm font-medium text-slate-200">
                                     {displayName}
                                 </p>
 
-                                <p className="mt-3 text-xs text-slate-500">Email</p>
+                                <p className="mt-3 text-xs text-slate-500">
+                                    Email
+                                </p>
 
                                 <p className="mt-1 break-all text-sm text-slate-300">
                                     {user?.email || '—'}
