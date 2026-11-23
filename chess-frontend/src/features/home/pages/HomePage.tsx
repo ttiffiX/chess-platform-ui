@@ -1,7 +1,7 @@
 import {React, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 
-import {useAuth} from '../../auth/context/AuthContext';
+import {useAuth} from '../../auth/hooks/useAuth';
 import {AppHeader} from '../../../components/layout/AppHeader';
 import {MatchmakingPanel} from '../../matchmaking/components/MatchmakingPanel';
 import {getDisplayName} from '../../../utils/user';

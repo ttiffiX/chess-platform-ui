@@ -7,7 +7,7 @@ import React, {
 
 import {Link, useParams} from 'react-router-dom';
 
-import {useAuth} from '../../auth/context/AuthContext';
+import {useAuth} from '../../auth/hooks/useAuth';
 import {getGame} from '../services/gameApi';
 
 import {useGameSocket} from '../hooks/useGameSocket';

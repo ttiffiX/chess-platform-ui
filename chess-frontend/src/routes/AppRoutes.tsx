@@ -6,7 +6,7 @@ import {OAuth2RedirectHandler} from '../features/auth/pages/OAuth2RedirectHandle
 import {HomePage} from '../features/home/pages/HomePage';
 import {GamePage} from '../features/game/pages/GamePage';
 
-import {useAuth} from '../features/auth/context/AuthContext';
+import {useAuth} from '../features/auth/hooks/useAuth';
 
 const LoadingPage: React.FC = () => (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
