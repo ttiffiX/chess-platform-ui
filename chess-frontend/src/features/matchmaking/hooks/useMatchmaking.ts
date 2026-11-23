@@ -23,26 +23,62 @@ interface UseMatchmakingResult {
     resetMatch: () => void;
 }
 
+interface MatchmakingState {
+    accessToken: string | null;
+    status: MatchmakingStatus;
+    match: MatchFoundResponse | null;
+    error: string | null;
+}
+
 export const useMatchmaking = (
     accessToken: string | null,
 ): UseMatchmakingResult => {
-    const [status, setStatus] = useState<MatchmakingStatus>('IDLE');
-    const [match, setMatch] = useState<MatchFoundResponse | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [matchmakingState, setMatchmakingState] =
+        useState<MatchmakingState>({
+            accessToken: null,
+            status: 'IDLE',
+            match: null,
+            error: null,
+        });
 
     const clientRef = useRef<Client | null>(null);
     const statusRef = useRef<MatchmakingStatus>('IDLE');
 
-    const updateStatus = useCallback((next: MatchmakingStatus) => {
-        statusRef.current = next;
-        setStatus(next);
-    }, []);
+    // -------------------------------------------------------------------------
+    // State helpers
+    // -------------------------------------------------------------------------
+
+    const updateStatus = useCallback((
+        nextStatus: MatchmakingStatus,
+    ) => {
+        statusRef.current = nextStatus;
+
+        setMatchmakingState((current) => {
+            const belongsToCurrentSession =
+                current.accessToken === accessToken;
+
+            return {
+                accessToken,
+                status: nextStatus,
+                match: belongsToCurrentSession
+                    ? current.match
+                    : null,
+                error: belongsToCurrentSession
+                    ? current.error
+                    : null,
+            };
+        });
+    }, [accessToken]);
+
+    // -------------------------------------------------------------------------
+    // Connection management
+    // -------------------------------------------------------------------------
 
     const disconnect = useCallback(async () => {
         const client = clientRef.current;
 
-        // Xóa ref trước khi deactivate để bỏ qua callback
-        // onDisconnected của client đã chủ động đóng.
+        // Clear the ref before deactivating to ignore
+        // onDisconnected from an intentional disconnect.
         clientRef.current = null;
 
         if (client) {
@@ -51,27 +87,33 @@ export const useMatchmaking = (
     }, []);
 
     const handleError = useCallback((message: string) => {
-        const current = statusRef.current;
+        const currentStatus = statusRef.current;
 
         if (
-            current === 'IDLE' ||
-            current === 'MATCHED' ||
-            current === 'ERROR'
+            currentStatus === 'IDLE' ||
+            currentStatus === 'MATCHED' ||
+            currentStatus === 'ERROR'
         ) {
             return;
         }
 
-        setError(message);
-        updateStatus('ERROR');
+        statusRef.current = 'ERROR';
+
+        setMatchmakingState({
+            accessToken,
+            status: 'ERROR',
+            match: null,
+            error: message,
+        });
 
         void disconnect();
-    }, [disconnect, updateStatus]);
+    }, [accessToken, disconnect]);
 
     /**
-     * Tạo kết nối mới.
+     * Create a new matchmaking connection.
      *
-     * preset được truyền vào khi kết nối để tìm trận.
-     * Không truyền preset khi chỉ muốn hỏi trạng thái queue.
+     * If preset is provided, start searching after connection.
+     * Otherwise, request the player's current matchmaking status.
      */
     const connect = useCallback((
         preset?: MatchmakingPreset,
@@ -80,13 +122,27 @@ export const useMatchmaking = (
             return;
         }
 
-        let client: Client;
+        // A separate holder avoids referencing `client`
+        // before its initialization is complete.
+        const connection: { client: Client | null } = {
+            client: null,
+        };
 
-        client = createMatchmakingSocket({
+        const isCurrentConnection = (): boolean => {
+            return (
+                connection.client !== null &&
+                clientRef.current === connection.client
+            );
+        };
+
+        const client = createMatchmakingSocket({
             accessToken,
             handlers: {
                 onConnected: (connectedClient) => {
-                    if (clientRef.current !== client) {
+                    if (
+                        !isCurrentConnection() ||
+                        connectedClient !== connection.client
+                    ) {
                         return;
                     }
 
@@ -96,17 +152,17 @@ export const useMatchmaking = (
                         } else {
                             sendGetMatchStatus(connectedClient);
                         }
-                    } catch (e) {
+                    } catch (error) {
                         handleError(
-                            e instanceof Error
-                                ? e.message
+                            error instanceof Error
+                                ? error.message
                                 : 'Unable to communicate with matchmaking server.',
                         );
                     }
                 },
 
                 onStatus: (serverStatus) => {
-                    if (clientRef.current !== client) {
+                    if (!isCurrentConnection()) {
                         return;
                     }
 
@@ -135,34 +191,39 @@ export const useMatchmaking = (
                 },
 
                 onMatchFound: (data) => {
-                    if (clientRef.current !== client) {
+                    if (!isCurrentConnection()) {
                         return;
                     }
 
-                    setMatch(data);
-                    setError(null);
-                    updateStatus('MATCHED');
+                    statusRef.current = 'MATCHED';
+
+                    setMatchmakingState({
+                        accessToken,
+                        status: 'MATCHED',
+                        match: data,
+                        error: null,
+                    });
 
                     void disconnect();
                 },
 
                 onError: (message) => {
-                    if (clientRef.current === client) {
+                    if (isCurrentConnection()) {
                         handleError(message);
                     }
                 },
 
                 onDisconnected: () => {
-                    if (clientRef.current !== client) {
+                    if (!isCurrentConnection()) {
                         return;
                     }
 
-                    const current = statusRef.current;
+                    const currentStatus = statusRef.current;
 
                     if (
-                        current !== 'IDLE' &&
-                        current !== 'MATCHED' &&
-                        current !== 'ERROR'
+                        currentStatus !== 'IDLE' &&
+                        currentStatus !== 'MATCHED' &&
+                        currentStatus !== 'ERROR'
                     ) {
                         handleError(
                             'Connection to matchmaking server was closed.',
@@ -172,7 +233,9 @@ export const useMatchmaking = (
             },
         });
 
+        connection.client = client;
         clientRef.current = client;
+
         void client.activate();
     }, [
         accessToken,
@@ -181,19 +244,17 @@ export const useMatchmaking = (
         updateStatus,
     ]);
 
-    /**
-     * Connect and restore queue status whenever the lobby mounts.
-     */
+    // -------------------------------------------------------------------------
+    // Initial connection and queue restoration
+    // -------------------------------------------------------------------------
+
     useEffect(() => {
         if (!accessToken) {
-            updateStatus('IDLE');
-            setMatch(null);
-            setError(null);
+            statusRef.current = 'IDLE';
             return;
         }
 
-        setError(null);
-        updateStatus('CONNECTING');
+        statusRef.current = 'CONNECTING';
 
         connect();
 
@@ -205,27 +266,41 @@ export const useMatchmaking = (
                 void client.deactivate();
             }
         };
-    }, [accessToken, connect, updateStatus]);
+    }, [accessToken, connect]);
 
-    const findMatch = useCallback((preset: MatchmakingPreset) => {
-        if (!accessToken || statusRef.current !== 'IDLE') {
+    // -------------------------------------------------------------------------
+    // Matchmaking actions
+    // -------------------------------------------------------------------------
+
+    const findMatch = useCallback((
+        preset: MatchmakingPreset,
+    ) => {
+        if (
+            !accessToken ||
+            statusRef.current !== 'IDLE'
+        ) {
             return;
         }
 
-        setError(null);
-        setMatch(null);
-        updateStatus('CONNECTING');
+        statusRef.current = 'CONNECTING';
+
+        setMatchmakingState({
+            accessToken,
+            status: 'CONNECTING',
+            match: null,
+            error: null,
+        });
 
         const client = clientRef.current;
 
-        // Dùng lại kết nối đã được tạo khi kiểm tra queue.
+        // Reuse the existing connection if available.
         if (client?.connected) {
             try {
                 sendFindMatch(client, preset);
-            } catch (e) {
+            } catch (error) {
                 handleError(
-                    e instanceof Error
-                        ? e.message
+                    error instanceof Error
+                        ? error.message
                         : 'Unable to start matchmaking.',
                 );
             }
@@ -233,8 +308,7 @@ export const useMatchmaking = (
             return;
         }
 
-        // Nếu socket đã mất kết nối, tạo kết nối mới
-        // và gửi find request sau khi connect thành công.
+        // Reconnect and send the find request after connection.
         void disconnect().then(() => {
             connect(preset);
         });
@@ -243,7 +317,6 @@ export const useMatchmaking = (
         connect,
         disconnect,
         handleError,
-        updateStatus,
     ]);
 
     const cancelMatch = useCallback(() => {
@@ -254,17 +327,19 @@ export const useMatchmaking = (
         const client = clientRef.current;
 
         if (!client?.connected) {
-            handleError('Matchmaking connection is no longer available.');
+            handleError(
+                'Matchmaking connection is no longer available.',
+            );
             return;
         }
 
         try {
             updateStatus('CANCELLING');
             sendCancelMatch(client);
-        } catch (e) {
+        } catch (error) {
             handleError(
-                e instanceof Error
-                    ? e.message
+                error instanceof Error
+                    ? error.message
                     : 'Unable to cancel matchmaking.',
             );
         }
@@ -278,12 +353,39 @@ export const useMatchmaking = (
             return;
         }
 
-        setMatch(null);
-        setError(null);
-        updateStatus('IDLE');
+        statusRef.current = 'IDLE';
+
+        setMatchmakingState({
+            accessToken,
+            status: 'IDLE',
+            match: null,
+            error: null,
+        });
 
         void disconnect();
-    }, [disconnect, updateStatus]);
+    }, [accessToken, disconnect]);
+
+    // -------------------------------------------------------------------------
+    // Derived state for the current authentication session
+    // -------------------------------------------------------------------------
+
+    const isCurrentSession =
+        accessToken !== null &&
+        matchmakingState.accessToken === accessToken;
+
+    const status: MatchmakingStatus = !accessToken
+        ? 'IDLE'
+        : isCurrentSession
+            ? matchmakingState.status
+            : 'CONNECTING';
+
+    const match = isCurrentSession
+        ? matchmakingState.match
+        : null;
+
+    const error = isCurrentSession
+        ? matchmakingState.error
+        : null;
 
     return {
         status,
