@@ -20,7 +20,6 @@ import {
 } from '../services/gameSocket';
 
 interface UseGameSocketParams {
-    accessToken: string | null;
     gameId: string | null;
     enabled: boolean;
     onGameMessage: (message: GameSocketMessage) => void;
@@ -43,37 +42,60 @@ interface UseGameSocketResult {
     claimTimeout: () => boolean;
 }
 
+interface GameSocketState {
+    gameId: string | null;
+    isConnected: boolean;
+    error: string | null;
+}
+
 export const useGameSocket = ({
-                                  accessToken,
                                   gameId,
                                   enabled,
                                   onGameMessage,
                               }: UseGameSocketParams): UseGameSocketResult => {
-    const [isConnected, setIsConnected] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [socketState, setSocketState] =
+        useState<GameSocketState>({
+            gameId: null,
+            isConnected: false,
+            error: null,
+        });
 
     const clientRef = useRef<Client | null>(null);
-
     const onGameMessageRef = useRef(onGameMessage);
-    const accessTokenRef = useRef(accessToken);
 
-    onGameMessageRef.current = onGameMessage;
-    accessTokenRef.current = accessToken;
+    // Keep the latest message handler without accessing refs during render.
+    useEffect(() => {
+        onGameMessageRef.current = onGameMessage;
+    }, [onGameMessage]);
+
+    const updateSocketError = useCallback((message: string) => {
+        setSocketState((current) => ({
+            gameId,
+            isConnected:
+                current.gameId === gameId
+                    ? current.isConnected
+                    : false,
+            error: message,
+        }));
+    }, [gameId]);
+
+    const clearSocketError = useCallback(() => {
+        setSocketState((current) => ({
+            gameId,
+            isConnected:
+                current.gameId === gameId
+                    ? current.isConnected
+                    : false,
+            error: null,
+        }));
+    }, [gameId]);
 
     useEffect(() => {
-        if (
-            !enabled ||
-            !accessTokenRef.current ||
-            !gameId
-        ) {
-            setIsConnected(false);
+        if (!enabled || !gameId) {
             return;
         }
 
         let active = true;
-
-        setIsConnected(false);
-        setError(null);
 
         const client = createGameSocket({
             gameId,
@@ -81,8 +103,11 @@ export const useGameSocket = ({
                 onConnected: () => {
                     if (!active) return;
 
-                    setIsConnected(true);
-                    setError(null);
+                    setSocketState({
+                        gameId,
+                        isConnected: true,
+                        error: null,
+                    });
                 },
 
                 onGameMessage: (message) => {
@@ -94,16 +119,17 @@ export const useGameSocket = ({
                 onError: (message) => {
                     if (!active) return;
 
-                    setError(message);
+                    updateSocketError(message);
                 },
 
                 onDisconnected: () => {
                     if (!active) return;
 
-                    setIsConnected(false);
-                    setError(
-                        'Connection interrupted. Reconnecting...',
-                    );
+                    setSocketState({
+                        gameId,
+                        isConnected: false,
+                        error: 'Connection interrupted. Reconnecting...',
+                    });
                 },
             },
         });
@@ -120,7 +146,11 @@ export const useGameSocket = ({
 
             void client.deactivate();
         };
-    }, [enabled, gameId]);
+    }, [
+        enabled,
+        gameId,
+        updateSocketError,
+    ]);
 
     const sendMove = useCallback((
         from: string,
@@ -130,12 +160,12 @@ export const useGameSocket = ({
         const client = clientRef.current;
 
         if (!client?.connected || !gameId) {
-            setError('Game connection is not ready.');
+            updateSocketError('Game connection is not ready.');
             return false;
         }
 
         try {
-            setError(null);
+            clearSocketError();
 
             sendGameMove(
                 client,
@@ -147,7 +177,7 @@ export const useGameSocket = ({
 
             return true;
         } catch (err) {
-            setError(
+            updateSocketError(
                 err instanceof Error
                     ? err.message
                     : 'Unable to send move.',
@@ -155,7 +185,11 @@ export const useGameSocket = ({
 
             return false;
         }
-    }, [gameId]);
+    }, [
+        gameId,
+        clearSocketError,
+        updateSocketError,
+    ]);
 
     const sendAction = useCallback((
         action: GameAction,
@@ -163,16 +197,18 @@ export const useGameSocket = ({
         const client = clientRef.current;
 
         if (!client?.connected || !gameId) {
-            setError('Game connection is not ready.');
+            updateSocketError('Game connection is not ready.');
             return false;
         }
 
         try {
-            setError(null);
+            clearSocketError();
+
             sendGameAction(client, gameId, action);
+
             return true;
         } catch (err) {
-            setError(
+            updateSocketError(
                 err instanceof Error
                     ? err.message
                     : 'Unable to send game action.',
@@ -180,7 +216,11 @@ export const useGameSocket = ({
 
             return false;
         }
-    }, [gameId]);
+    }, [
+        gameId,
+        clearSocketError,
+        updateSocketError,
+    ]);
 
     const offerDraw = useCallback(
         () => sendAction('offerDraw'),
@@ -207,9 +247,15 @@ export const useGameSocket = ({
         [sendAction],
     );
 
+    // Ignore the previous game's connection state.
+    const isCurrentGame =
+        enabled &&
+        gameId !== null &&
+        socketState.gameId === gameId;
+
     return {
-        isConnected,
-        error,
+        isConnected: isCurrentGame && socketState.isConnected,
+        error: isCurrentGame ? socketState.error : null,
         sendMove,
         offerDraw,
         acceptDraw,

@@ -6,7 +6,6 @@ import type {
     GameUpdateResponse,
     GameViewState,
     MoveHistoryDto,
-    PieceColor,
     PieceDto,
     PieceType,
 } from '../types/game';

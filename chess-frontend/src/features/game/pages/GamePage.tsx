@@ -32,16 +32,26 @@ import {
     mergeGameEventResponse,
     mergeGameResponse,
     mergeGameUpdateResponse,
-} from '../utils/gameState.ts';
+} from '../utils/gameState';
 
 import {parseFen} from '../utils/fen';
 
 import type {
     GameResponse,
     GameSocketMessage,
-    GameStatus,
     PieceColor,
 } from '../types/game';
+
+interface GamePageLoadState {
+    gameId: string | null;
+    game: GameResponse | null;
+    error: string | null;
+}
+
+interface GameReviewState {
+    gameId: string | null;
+    moveIndex: number | null;
+}
 
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
@@ -62,48 +72,118 @@ const getErrorMessage = (error: unknown): string => {
 
 export const GamePage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
+
     const {user, logout, accessToken} = useAuth();
     const {showError} = useToast();
 
-    const [game, setGame] = useState<GameResponse | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+    // -------------------------------------------------------------------------
+    // Page state
+    // -------------------------------------------------------------------------
 
-    // Snapshot review state, independent from live game state.
-    const [reviewMoveIndex, setReviewMoveIndex] = useState<number | null>(null);
+    const [loadState, setLoadState] = useState<GamePageLoadState>({
+        gameId: null,
+        game: null,
+        error: null,
+    });
+
+    // Review state belongs to a specific game.
+    // Opening another game automatically resets the review position.
+    const [reviewState, setReviewState] = useState<GameReviewState>({
+        gameId: null,
+        moveIndex: null,
+    });
+
+    // Store the result key that the user has dismissed.
+    const [dismissedResultKey, setDismissedResultKey] =
+        useState<string | null>(null);
 
     // Prevent duplicate timeout requests for the same turn.
     const timeoutRequestRef = useRef<string | null>(null);
 
+    // Only use data belonging to the game currently in the URL.
+    const isCurrentGame =
+        gameId !== undefined &&
+        loadState.gameId === gameId;
+
+    const game = isCurrentGame
+        ? loadState.game
+        : null;
+
+    const error = !gameId
+        ? 'Invalid game ID.'
+        : isCurrentGame
+            ? loadState.error
+            : null;
+
+    const isLoading =
+        Boolean(gameId) &&
+        !isCurrentGame;
+
+    const reviewMoveIndex =
+        reviewState.gameId === gameId
+            ? reviewState.moveIndex
+            : null;
+
+    // -------------------------------------------------------------------------
+    // Game state updater
+    // -------------------------------------------------------------------------
+
+    const updateGame = useCallback((
+        updater: (
+            currentGame: GameResponse | null,
+        ) => GameResponse | null,
+    ) => {
+        if (!gameId) {
+            return;
+        }
+
+        setLoadState((currentState) => {
+            const belongsToCurrentGame =
+                currentState.gameId === gameId;
+
+            return {
+                gameId,
+                game: updater(
+                    belongsToCurrentGame
+                        ? currentState.game
+                        : null,
+                ),
+                error: belongsToCurrentGame
+                    ? currentState.error
+                    : null,
+            };
+        });
+    }, [gameId]);
+
+    // -------------------------------------------------------------------------
+    // Initial game loading
+    // -------------------------------------------------------------------------
+
     useEffect(() => {
         if (!gameId) {
-            setError('Invalid game ID.');
-            setIsLoading(false);
             return;
         }
 
         let cancelled = false;
 
         const loadGame = async () => {
-            setIsLoading(true);
-            setError(null);
-
             try {
                 const gameState = await getGame(gameId);
 
                 if (!cancelled) {
-                    setGame((currentGame) =>
-                        mergeGameResponse(currentGame, gameState),
-                    );
+                    setLoadState({
+                        gameId,
+                        game: gameState,
+                        error: null,
+                    });
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setError(getErrorMessage(err));
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoading(false);
+                    setLoadState({
+                        gameId,
+                        game: null,
+                        error: getErrorMessage(err),
+                    });
                 }
             }
         };
@@ -115,23 +195,25 @@ export const GamePage: React.FC = () => {
         };
     }, [gameId]);
 
-    // Reset review state when opening another game.
-    useEffect(() => {
-        setReviewMoveIndex(null);
-    }, [gameId]);
+    // -------------------------------------------------------------------------
+    // Game state handlers
+    // -------------------------------------------------------------------------
 
-    // Accept only newer game states.
-    // For the same version, accept a newer server clock snapshot.
     // REST always returns the complete GameResponse.
-    const handleRestGameState = useCallback((nextState: GameResponse) => {
-        setGame((currentGame) =>
+    // Accept only newer states and newer clock snapshots.
+    const handleRestGameState = useCallback((
+        nextState: GameResponse,
+    ) => {
+        updateGame((currentGame) =>
             mergeGameResponse(currentGame, nextState),
         );
-    }, []);
+    }, [updateGame]);
 
-// WebSocket can return either GameUpdateResponse or GameEventResponse.
-    const handleGameMessage = useCallback((message: GameSocketMessage) => {
-        setGame((currentGame) => {
+    // WebSocket can return GameUpdateResponse or GameEventResponse.
+    const handleGameMessage = useCallback((
+        message: GameSocketMessage,
+    ) => {
+        updateGame((currentGame) => {
             if (!currentGame) {
                 return currentGame;
             }
@@ -148,7 +230,11 @@ export const GamePage: React.FC = () => {
                 message,
             );
         });
-    }, []);
+    }, [updateGame]);
+
+    // -------------------------------------------------------------------------
+    // WebSocket
+    // -------------------------------------------------------------------------
 
     const {
         isConnected,
@@ -160,7 +246,6 @@ export const GamePage: React.FC = () => {
         resign,
         claimTimeout,
     } = useGameSocket({
-        accessToken,
         gameId: gameId ?? null,
         enabled: Boolean(
             game &&
@@ -195,14 +280,17 @@ export const GamePage: React.FC = () => {
         };
     }, [isConnected, gameId, handleRestGameState]);
 
-    // Show WebSocket errors through existing toast system.
+    // Show WebSocket errors through the shared toast system.
     useEffect(() => {
         if (socketError) {
             showError(socketError);
         }
     }, [socketError, showError]);
 
-    // Load a historical position by backend moveIndex.
+    // -------------------------------------------------------------------------
+    // Game review
+    // -------------------------------------------------------------------------
+
     const handleReviewIndex = useCallback((moveIndex: number) => {
         if (!game) {
             return;
@@ -218,25 +306,36 @@ export const GamePage: React.FC = () => {
             return;
         }
 
-        // Chọn vị trí mới nhất đồng nghĩa quay về live game.
-        setReviewMoveIndex(
-            moveIndex === latestMoveIndex
-                ? null
-                : moveIndex,
-        );
-    }, [game]);
+        // Selecting the latest position means returning to the live game.
+        setReviewState({
+            gameId: gameId ?? null,
+            moveIndex:
+                moveIndex === latestMoveIndex
+                    ? null
+                    : moveIndex,
+        });
+    }, [game, gameId]);
 
     const handleReturnToLatest = useCallback(() => {
-        setReviewMoveIndex(null);
-    }, []);
+        setReviewState({
+            gameId: gameId ?? null,
+            moveIndex: null,
+        });
+    }, [gameId]);
 
-    // Automatically ask the backend to claim timeout when the active
-    // clock reaches zero. The ref prevents duplicate successful sends.
+    // -------------------------------------------------------------------------
+    // Timeout handling
+    // -------------------------------------------------------------------------
+
     const timeoutTurnKey =
         game?.turnStartTimeEpochMs === null ||
         game?.turnStartTimeEpochMs === undefined
             ? null
-            : `${game.turnStartTimeEpochMs}:${parseFen(game.fen).currentTurn}`;
+            : [
+                game.gameId,
+                game.turnStartTimeEpochMs,
+                parseFen(game.fen).currentTurn,
+            ].join(':');
 
     const handleClockExpired = useCallback((): boolean => {
         if (!timeoutTurnKey) {
@@ -256,19 +355,9 @@ export const GamePage: React.FC = () => {
         return sent;
     }, [claimTimeout, timeoutTurnKey]);
 
-    // Open result popup when the live game ends.
-    useEffect(() => {
-        if (!game) {
-            return;
-        }
-
-        setIsResultModalOpen(
-            game.gameResult.status !== 'IN_PROGRESS',
-        );
-    }, [
-        game?.gameId,
-        game?.gameResult.status,
-    ]);
+    // -------------------------------------------------------------------------
+    // Loading and error states
+    // -------------------------------------------------------------------------
 
     if (isLoading) {
         return (
@@ -335,8 +424,8 @@ export const GamePage: React.FC = () => {
     }
 
     // -------------------------------------------------------------------------
-// Current / review position
-// -------------------------------------------------------------------------
+    // Current / review position
+    // -------------------------------------------------------------------------
 
     const latestMoveIndex = Math.max(
         0,
@@ -348,23 +437,23 @@ export const GamePage: React.FC = () => {
     const currentMoveIndex =
         reviewMoveIndex ?? latestMoveIndex;
 
-// Build the current live state from the latest FEN.
+    // Build the current live state from the latest FEN.
     const liveGame = createGameViewState(
         game,
         latestMoveIndex,
         false,
     );
 
-// Build the position currently displayed on the board.
+    // Build the position currently displayed on the board.
     const displayGame = createGameViewState(
         game,
         currentMoveIndex,
         isReviewing,
     );
 
-// -------------------------------------------------------------------------
-// Player colors
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Player colors
+    // -------------------------------------------------------------------------
 
     const playerColor: PieceColor | null =
         user?.id === game.whitePlayerId
@@ -380,11 +469,11 @@ export const GamePage: React.FC = () => {
                 ? 'WHITE'
                 : null;
 
-// -------------------------------------------------------------------------
-// Clocks
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Clocks
+    // -------------------------------------------------------------------------
 
-// Clock luôn lấy từ live game, kể cả khi đang review lịch sử.
+    // Clock always uses the live game, even while reviewing history.
     const playerRemainingMs =
         playerColor === 'WHITE'
             ? game.whiteRemainingMs
@@ -399,11 +488,11 @@ export const GamePage: React.FC = () => {
                 ? game.blackRemainingMs
                 : null;
 
-// -------------------------------------------------------------------------
-// Captured pieces
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Captured pieces
+    // -------------------------------------------------------------------------
 
-// Captures được tính theo history đến vị trí đang xem.
+    // Captures are calculated from history up to the displayed position.
     const playerCapturedPieces = getPiecesCapturedBy(
         playerColor,
         displayGame.capturedWhitePieces,
@@ -416,9 +505,9 @@ export const GamePage: React.FC = () => {
         displayGame.capturedBlackPieces,
     );
 
-// -------------------------------------------------------------------------
-// Material advantage
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Material advantage
+    // -------------------------------------------------------------------------
 
     const playerMaterialAdvantage = getMaterialAdvantage(
         playerColor,
@@ -432,9 +521,9 @@ export const GamePage: React.FC = () => {
         displayGame.capturedBlackPieces,
     );
 
-// -------------------------------------------------------------------------
-// Active turn
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Active turn
+    // -------------------------------------------------------------------------
 
     const isGameInProgress =
         game.gameResult.status === 'IN_PROGRESS';
@@ -449,14 +538,17 @@ export const GamePage: React.FC = () => {
         opponentColor !== null &&
         liveGame.currentTurn === opponentColor;
 
-// Game actions are unavailable while reviewing history.
+    // Game actions are unavailable while reviewing history.
     const canUseGameActions =
         isConnected &&
         isGameInProgress &&
         !isReviewing &&
         playerColor !== null;
 
-    // Result display.
+    // -------------------------------------------------------------------------
+    // Game result
+    // -------------------------------------------------------------------------
+
     const winner = game.gameResult.winner;
 
     const didPlayerWin =
@@ -476,6 +568,21 @@ export const GamePage: React.FC = () => {
             : didPlayerWin
                 ? 'You won this game!'
                 : 'You lost this game.';
+
+    // The popup is visible until the user dismisses this game result.
+    const resultKey = [
+        game.gameId,
+        game.gameResult.status,
+        winner ?? 'DRAW',
+    ].join(':');
+
+    const isResultModalOpen =
+        !isGameInProgress &&
+        dismissedResultKey !== resultKey;
+
+    // -------------------------------------------------------------------------
+    // Render
+    // -------------------------------------------------------------------------
 
     return (
         <div className="
@@ -593,12 +700,20 @@ export const GamePage: React.FC = () => {
                             min-[951px]:overflow-hidden
                         ">
                             <ChessBoard
-                                key={isReviewing ? `review-${currentMoveIndex}` : 'live'}
+                                key={[
+                                    game.gameId,
+                                    game.stateVersion,
+                                    currentMoveIndex,
+                                    playerColor ?? 'SPECTATOR',
+                                    isReviewing ? 'REVIEW' : 'LIVE',
+                                    isReviewing
+                                        ? 'no-socket-error'
+                                        : socketError ?? 'no-socket-error',
+                                ].join(':')}
                                 game={displayGame}
                                 moveIndex={currentMoveIndex}
                                 playerColor={playerColor}
                                 isConnected={isConnected && !isReviewing}
-                                socketError={isReviewing ? null : socketError}
                                 onMove={sendMove}
                             />
                         </div>
@@ -705,7 +820,7 @@ export const GamePage: React.FC = () => {
                         <div className="mt-6 flex flex-col gap-2">
                             <button
                                 type="button"
-                                onClick={() => setIsResultModalOpen(false)}
+                                onClick={() => setDismissedResultKey(resultKey)}
                                 className="
                                     w-full rounded-xl
                                     border border-slate-700

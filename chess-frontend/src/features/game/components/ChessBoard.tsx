@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useState} from 'react';
 
 import type {
     GameViewState,
@@ -13,7 +13,6 @@ interface ChessBoardProps {
     moveIndex: number;
     playerColor: PieceColor | null;
     isConnected: boolean;
-    socketError: string | null;
     onMove: (
         from: string,
         to: string,
@@ -52,7 +51,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                                                           moveIndex,
                                                           playerColor,
                                                           isConnected,
-                                                          socketError,
                                                           onMove,
                                                       }) => {
     const [selectedSquare, setSelectedSquare] =
@@ -114,26 +112,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         (move) => move.moveIndex === moveIndex,
     ) ?? null
         : null;
-
-    // Khi trạng thái ván đấu thay đổi, xóa lựa chọn cũ.
-    useEffect(() => {
-        setSelectedSquare(null);
-        setPendingMove(null);
-        setPendingPromotion(null);
-    }, [
-        game.gameId,
-        game.currentTurn,
-        game.gameResult.status,
-        game.historyItems.length,
-        moveIndex,
-    ]);
-
-    // Nếu WebSocket báo lỗi, cho phép người chơi thao tác lại.
-    useEffect(() => {
-        if (socketError && pendingMove) {
-            setPendingMove(null);
-        }
-    }, [socketError, pendingMove]);
 
     const handlePromotion = (promotionType: PromotionPieceType) => {
         if (!pendingPromotion) {

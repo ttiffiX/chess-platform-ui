@@ -16,6 +16,11 @@ interface GameClockProps {
     className?: string;
 }
 
+interface ClockReading {
+    snapshotKey: string;
+    remainingMs: number;
+}
+
 export const GameClock: React.FC<GameClockProps> = ({
                                                         label,
                                                         remainingMs,
@@ -25,55 +30,20 @@ export const GameClock: React.FC<GameClockProps> = ({
                                                         onTimeExpired,
                                                         className = '',
                                                     }) => {
-    const [performanceNow, setPerformanceNow] = useState(
-        () => performance.now(),
-    );
+    const [clockReading, setClockReading] =
+        useState<ClockReading | null>(null);
 
-    const receivedAtRef = useRef(performance.now());
     const handledTurnRef = useRef<string | null>(null);
 
-    // Reset baseline whenever a new server clock snapshot arrives.
-    useEffect(() => {
-        const receivedAt = performance.now();
-
-        receivedAtRef.current = receivedAt;
-        setPerformanceNow(receivedAt);
-    }, [
+    // Identify the server clock snapshot currently being displayed.
+    const snapshotKey = [
         remainingMs,
         turnStartTimeEpochMs,
         serverTimeEpochMs,
-    ]);
-
-    // Update the displayed clock using a monotonic timer.
-    useEffect(() => {
-        if (
-            !isActive ||
-            remainingMs === null ||
-            turnStartTimeEpochMs === null ||
-            serverTimeEpochMs === null
-        ) {
-            return;
-        }
-
-        const updateTime = () => {
-            setPerformanceNow(performance.now());
-        };
-
-        updateTime();
-
-        const intervalId = window.setInterval(updateTime, 250);
-
-        return () => {
-            window.clearInterval(intervalId);
-        };
-    }, [
         isActive,
-        remainingMs,
-        turnStartTimeEpochMs,
-        serverTimeEpochMs,
-    ]);
+    ].join(':');
 
-    // Time elapsed between the turn starting and the server response.
+    // Calculate elapsed time on the server before the response arrived.
     const serverElapsedMs =
         isActive &&
         turnStartTimeEpochMs !== null &&
@@ -84,23 +54,86 @@ export const GameClock: React.FC<GameClockProps> = ({
             )
             : 0;
 
-    // Time elapsed since the frontend received that response.
-    const clientElapsedMs = isActive
-        ? Math.max(
-            0,
-            performanceNow - receivedAtRef.current,
-        )
-        : 0;
-
-    const currentRemainingMs =
+    // Fallback value used immediately when a new snapshot arrives.
+    const initialRemainingMs =
         remainingMs === null ||
         turnStartTimeEpochMs === null ||
         serverTimeEpochMs === null
             ? null
-            : Math.max(
-                0,
-                remainingMs - serverElapsedMs - clientElapsedMs,
-            );
+            : Math.max(0, remainingMs - serverElapsedMs);
+
+    // Synchronize the local clock with each server snapshot.
+    useEffect(() => {
+        if (
+            remainingMs === null ||
+            turnStartTimeEpochMs === null ||
+            serverTimeEpochMs === null
+        ) {
+            return;
+        }
+
+        const receivedAt = performance.now();
+
+        const baseRemainingMs = Math.max(
+            0,
+            remainingMs - (
+                isActive
+                    ? Math.max(
+                        0,
+                        serverTimeEpochMs - turnStartTimeEpochMs,
+                    )
+                    : 0
+            ),
+        );
+
+        const updateClock = () => {
+            const clientElapsedMs = isActive
+                ? Math.max(
+                    0,
+                    performance.now() - receivedAt,
+                )
+                : 0;
+
+            setClockReading({
+                snapshotKey,
+                remainingMs: Math.max(
+                    0,
+                    baseRemainingMs - clientElapsedMs,
+                ),
+            });
+        };
+
+        // Schedule the initial reading instead of updating state
+        // synchronously inside the effect.
+        const initialUpdateId = window.setTimeout(
+            updateClock,
+            0,
+        );
+
+        const intervalId = isActive
+            ? window.setInterval(updateClock, 250)
+            : null;
+
+        return () => {
+            window.clearTimeout(initialUpdateId);
+
+            if (intervalId !== null) {
+                window.clearInterval(intervalId);
+            }
+        };
+    }, [
+        remainingMs,
+        turnStartTimeEpochMs,
+        serverTimeEpochMs,
+        isActive,
+        snapshotKey,
+    ]);
+
+    // Ignore an outdated clock reading when a new snapshot arrives.
+    const currentRemainingMs =
+        clockReading?.snapshotKey === snapshotKey
+            ? clockReading.remainingMs
+            : initialRemainingMs;
 
     // Request timeout only once successfully for each active turn.
     useEffect(() => {
@@ -129,7 +162,6 @@ export const GameClock: React.FC<GameClockProps> = ({
     }, [
         isActive,
         currentRemainingMs,
-        performanceNow,
         turnStartTimeEpochMs,
         label,
         onTimeExpired,
