@@ -40,6 +40,15 @@ interface VariationLinesProps {
     onSelectNode: (nodeId: string) => void;
 }
 
+interface VariationBranchProps extends VariationLinesProps {
+    nodeId: string;
+    topOffset: number;
+    onHeightChange: (
+        nodeId: string,
+        height: number,
+    ) => void;
+}
+
 interface VariationLineProps {
     line: AnalysisMoveLine;
     selectedNodeId: string;
@@ -57,64 +66,6 @@ interface MainLineMoveProps {
 
 interface ReviewIconProps {
     type: ReviewIconType;
-}
-
-/**
- * Approximate height of a variation button:
- * text line + vertical padding + borders.
- *
- * Keep this synchronized with AnalysisMoveButton's
- * variation button classes.
- */
-const VARIATION_MOVE_HEIGHT = 30;
-const VARIATION_TOP_GAP = 4;
-const VARIATION_CONTAINER_PADDING = 8;
-const VARIATION_LINE_GAP = 4;
-
-/**
- * Get the maximum nested branch height below any move
- * in the same horizontal line.
- */
-function getLineBranchHeight(
-    line: AnalysisMoveLine,
-): number {
-    return line.reduce(
-        (maximum, item) => Math.max(
-            maximum,
-            getVariationStackHeight(item.variations),
-        ),
-        0,
-    );
-}
-
-/**
- * Calculate the vertical space consumed by all variations
- * attached to one move.
- *
- * Different variation lines are stacked vertically.
- */
-function getVariationStackHeight(
-    lines: AnalysisMoveLine[],
-): number {
-    if (lines.length === 0) {
-        return 0;
-    }
-
-    const linesHeight = lines.reduce(
-        (total, line, index) => {
-            return total
-                + (index > 0 ? VARIATION_LINE_GAP : 0)
-                + VARIATION_MOVE_HEIGHT
-                + getLineBranchHeight(line);
-        },
-        0,
-    );
-
-    return (
-        VARIATION_TOP_GAP
-        + VARIATION_CONTAINER_PADDING
-        + linesHeight
-    );
 }
 
 const formatMove = (move: string | null): string => {
@@ -330,11 +281,12 @@ const VariationLines: React.FC<VariationLinesProps> = ({
 
     return (
         <div className="
-            ml-3 w-full min-w-0 max-w-full
+            ml-3 flex w-full min-w-0 max-w-full
+            flex-col gap-1
             border-l border-sky-400/40
             py-1 pl-2
         ">
-            {lines.map((line, index) => {
+            {lines.map((line) => {
                 const firstNode = line[0]?.node;
 
                 if (!firstNode) {
@@ -344,11 +296,10 @@ const VariationLines: React.FC<VariationLinesProps> = ({
                 return (
                     <div
                         key={firstNode.id}
-                        className={`
+                        className="
                             w-full min-w-0 max-w-full
                             overflow-x-auto overflow-y-hidden
-                            ${index > 0 ? 'mt-1' : ''}
-                        `}
+                        "
                     >
                         <VariationLine
                             line={line}
@@ -359,6 +310,66 @@ const VariationLines: React.FC<VariationLinesProps> = ({
                     </div>
                 );
             })}
+        </div>
+    );
+};
+
+const VariationBranch: React.FC<VariationBranchProps> = ({
+                                                             nodeId,
+                                                             topOffset,
+                                                             lines,
+                                                             selectedNodeId,
+                                                             isAnalyzing,
+                                                             onSelectNode,
+                                                             onHeightChange,
+                                                         }) => {
+    const branchRef = React.useRef<HTMLDivElement>(null);
+
+    React.useLayoutEffect(() => {
+        const element = branchRef.current;
+
+        if (!element) {
+            return;
+        }
+
+        const updateHeight = () => {
+            const height = Math.max(
+                element.getBoundingClientRect().height,
+                element.scrollHeight,
+            );
+
+            onHeightChange(nodeId, height);
+        };
+
+        // Đo ngay lần đầu, không đợi ResizeObserver.
+        updateHeight();
+
+        const observer = new ResizeObserver(updateHeight);
+
+        observer.observe(element);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [nodeId, onHeightChange]);
+
+    return (
+        <div
+            ref={branchRef}
+            style={{
+                top: `calc(100% + ${topOffset}px)`,
+            }}
+            className="
+                absolute left-0 z-20
+                w-max pt-1
+            "
+        >
+            <VariationLines
+                lines={lines}
+                selectedNodeId={selectedNodeId}
+                isAnalyzing={isAnalyzing}
+                onSelectNode={onSelectNode}
+            />
         </div>
     );
 };
@@ -379,13 +390,52 @@ const VariationLine: React.FC<VariationLineProps> = ({
                                                          isAnalyzing,
                                                          onSelectNode,
                                                      }) => {
-    const reservedHeight = getLineBranchHeight(line);
+    const [branchHeights, setBranchHeights] =
+        React.useState<Record<string, number>>({});
+
+    const handleBranchHeightChange = React.useCallback(
+        (nodeId: string, height: number) => {
+            setBranchHeights((current) => {
+                const previousHeight = current[nodeId] ?? 0;
+
+                // Tránh render lại khi kích thước không thay đổi.
+                if (Math.abs(previousHeight - height) < 0.5) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    [nodeId]: height,
+                };
+            });
+        },
+        [],
+    );
+
+    // Lấy nhánh con cao nhất trong hàng hiện tại.
+    const branchOffsets: Record<string, number> = {};
+
+    let reservedHeight = 0;
+
+    const branchItems = line.filter(
+        (item) => item.variations.length > 0,
+    );
+
+    branchItems.forEach((item, index) => {
+        branchOffsets[item.node.id] = reservedHeight;
+
+        reservedHeight += branchHeights[item.node.id] ?? 0;
+
+        if (index < branchItems.length - 1) {
+            reservedHeight += 4;
+        }
+    });
 
     return (
         <div
             className="
-                 relative flex w-max min-w-full
-                 items-start gap-1
+                relative flex w-max min-w-full
+                items-start gap-1
             "
             style={{
                 paddingBottom: `${reservedHeight}px`,
@@ -408,17 +458,15 @@ const VariationLine: React.FC<VariationLineProps> = ({
                     />
 
                     {item.variations.length > 0 && (
-                        <div className="
-                            absolute left-0 top-full
-                            z-20 w-max pt-1
-                        ">
-                            <VariationLines
-                                lines={item.variations}
-                                selectedNodeId={selectedNodeId}
-                                isAnalyzing={isAnalyzing}
-                                onSelectNode={onSelectNode}
-                            />
-                        </div>
+                        <VariationBranch
+                            nodeId={item.node.id}
+                            topOffset={branchOffsets[item.node.id] ?? 0}
+                            lines={item.variations}
+                            selectedNodeId={selectedNodeId}
+                            isAnalyzing={isAnalyzing}
+                            onSelectNode={onSelectNode}
+                            onHeightChange={handleBranchHeightChange}
+                        />
                     )}
                 </div>
             ))}
