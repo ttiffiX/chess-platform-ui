@@ -18,23 +18,9 @@ import type {
     PagedResponse,
 } from '../types/gameHistory';
 import {formatDateTime} from "../../../utils/time.ts";
-import type {GameStatus} from "../../game/types/game.ts";
 import type {UserInfo} from "../../../types/user.ts";
 import {getAvatarUrl, getDisplayName} from "../../../utils/user.ts";
-
-const GAME_STATUS_LABELS: Record<GameStatus, string> = {
-    IN_PROGRESS: 'In progress',
-    CHECKMATE: 'Checkmate',
-    STALEMATE: 'Stalemate',
-
-    DRAW_INSUFFICIENT_MATERIAL: 'Insufficient material',
-    DRAW_FIFTY_MOVE_RULE: '50-move rule',
-    DRAW_THREEFOLD_REPETITION: 'Threefold repetition',
-    DRAW_BY_AGREEMENT: 'Draw by agreement',
-
-    RESIGNED: 'Resignation',
-    TIMED_OUT: 'Time out',
-};
+import {GAME_STATUS_LABELS} from "../../game/utils/gameResult.ts";
 
 const OUTCOME_LABELS: Record<GameOutcome, string> = {
     WIN: 'Victory',
@@ -163,6 +149,27 @@ const HistoryCard: React.FC<HistoryCardProps> = ({game, user}) => {
                         {formatDateTime(game.endedAt)}
                     </p>
                 </div>
+
+            </div>
+
+            {/* Review game */}
+            <div className="
+                mt-5 flex justify-end
+                border-t border-slate-800 pt-4
+            ">
+                <Link
+                    to={`/analysis/${game.gameId}`}
+                    className="
+                        inline-flex items-center gap-2
+                        rounded-lg bg-emerald-300
+                        px-4 py-2.5 text-sm
+                        font-bold text-slate-950
+                        transition hover:bg-emerald-200
+                    "
+                >
+                    Review game
+                    <span aria-hidden="true">→</span>
+                </Link>
             </div>
         </article>
     );

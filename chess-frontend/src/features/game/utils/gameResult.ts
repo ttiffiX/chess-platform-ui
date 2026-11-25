@@ -30,3 +30,17 @@ export const getGameResultDescription = (status: GameStatus): string => {
             return 'The game has ended.';
     }
 };
+
+export const GAME_STATUS_LABELS: Record<GameStatus, string> = {
+    IN_PROGRESS: 'In progress',
+    CHECKMATE: 'Checkmate',
+    STALEMATE: 'Stalemate',
+
+    DRAW_INSUFFICIENT_MATERIAL: 'Insufficient material',
+    DRAW_FIFTY_MOVE_RULE: '50-move rule',
+    DRAW_THREEFOLD_REPETITION: 'Threefold repetition',
+    DRAW_BY_AGREEMENT: 'Draw by agreement',
+
+    RESIGNED: 'Resignation',
+    TIMED_OUT: 'Time out',
+};

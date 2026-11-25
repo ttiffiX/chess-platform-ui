@@ -13,6 +13,7 @@ interface ChessBoardProps {
     moveIndex: number;
     playerColor: PieceColor | null;
     isConnected: boolean;
+    allowAnySide?: boolean;
     onMove: (
         from: string,
         to: string,
@@ -46,6 +47,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                                                           moveIndex,
                                                           playerColor,
                                                           isConnected,
+                                                          allowAnySide = false,
                                                           onMove,
                                                       }) => {
     const [selectedSquare, setSelectedSquare] =
@@ -77,8 +79,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         game.gameResult.status !== 'IN_PROGRESS';
 
     const isPlayerTurn =
-        playerColor !== null &&
-        playerColor === game.currentTurn &&
+        (
+            allowAnySide ||
+            (
+                playerColor !== null &&
+                playerColor === game.currentTurn
+            )
+        ) &&
         !isGameOver;
 
     const canInteract =
@@ -186,7 +193,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         // và quân đó phải có nước đi hợp lệ.
         if (
             piece &&
-            piece.color === playerColor &&
+            piece.color === (
+                allowAnySide
+                    ? game.currentTurn
+                    : playerColor
+            ) &&
             (game.legalMoves[square]?.length ?? 0) > 0
         ) {
             setSelectedSquare(square);

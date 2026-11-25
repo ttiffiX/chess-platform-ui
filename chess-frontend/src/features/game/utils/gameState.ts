@@ -237,7 +237,7 @@ export interface CapturedPiecesByColor {
  * Q = white queen
  * q = black queen
  */
-const toCapturedPieceDto = (
+export const toCapturedPieceDto = (
     symbol: string,
 ): PieceDto | null => {
     const type = PIECE_TYPES[symbol.toLowerCase()];
