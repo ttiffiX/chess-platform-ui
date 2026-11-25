@@ -1,4 +1,7 @@
-import type {GameResult} from '../../game/types/game';
+import type {
+    GameResult,
+    GameStatus,
+} from '../../game/types/game';
 
 import type {
     GameAnalysisDto,
@@ -13,6 +16,20 @@ import type {
 const IN_PROGRESS_RESULT: GameResult = {
     status: 'IN_PROGRESS',
     winner: null,
+};
+
+const POSITION_TERMINAL_STATUSES = new Set<GameStatus>([
+    'CHECKMATE',
+    'STALEMATE',
+    'DRAW_INSUFFICIENT_MATERIAL',
+    'DRAW_FIFTY_MOVE_RULE',
+    'DRAW_THREEFOLD_REPETITION',
+]);
+
+const isPositionTerminal = (
+    result: GameResult,
+): boolean => {
+    return POSITION_TERMINAL_STATUSES.has(result.status);
 };
 
 /**
@@ -67,7 +84,8 @@ export const buildMainLineTree = (
 
             legalMoves: record.legalMoves,
 
-            gameResult: index === lastIndex
+            gameResult: index === lastIndex &&
+            isPositionTerminal(replay.gameResult)
                 ? replay.gameResult
                 : IN_PROGRESS_RESULT,
 
@@ -112,6 +130,12 @@ export const appendAnalysisMove = (
 
     if (!parent) {
         throw new Error('Analysis parent position does not exist.');
+    }
+
+    if (parent.gameResult.status !== 'IN_PROGRESS') {
+        throw new Error(
+            'Cannot create a variation from a finished position.',
+        );
     }
 
     const existingChildId = parent.childIds.find((childId) => {

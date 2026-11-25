@@ -3,25 +3,108 @@ import React from 'react';
 import {Link, useParams} from 'react-router-dom';
 
 import {useAuth} from '../../auth/hooks/useAuth';
+
 import {AppHeader} from '../../../components/layout/AppHeader';
 
 import {ChessBoard} from '../../game/components/ChessBoard';
+import {GamePlayerCard} from '../../game/components/GamePlayerCard';
+import {GameClock} from '../../game/components/GameClock';
+
+import {AnalysisMoveHistoryPanel} from '../components/AnalysisMoveHistoryPanel';
 
 import {useGameAnalysis} from '../hooks/useGameAnalysis';
-import {AnalysisMoveTree} from '../components/AnalysisMoveTree';
 
 import {createAnalysisViewState} from '../utils/analysisView';
-import {formatTimeControl} from "../../../utils/time.ts";
-import {GAME_STATUS_LABELS} from "../../game/utils/gameResult.ts";
-import type {GameResult} from "../../game/types/game.ts";
+
+import {
+    getPiecesCapturedBy,
+    getMaterialAdvantage,
+} from '../../game/utils/materialScore';
+
+import {
+    GAME_STATUS_LABELS,
+    getGameResultDescription,
+} from '../../game/utils/gameResult';
+
+import {
+    getAvatarUrl,
+    getDisplayName,
+} from '../../../utils/user';
+
+import {formatTimeControl} from '../../../utils/time';
+
+import type {
+    GameResult,
+    PieceColor,
+} from '../../game/types/game';
+
+import type {
+    GameReplayDto,
+} from '../types/gameAnalysis';
+
+import type {
+    AnalysisNode,
+} from '../types/tree';
+
+interface ClockSnapshot {
+    whiteRemainingMs: number | null;
+    blackRemainingMs: number | null;
+}
+
+const getClockSnapshot = (
+    replay: GameReplayDto,
+    path: AnalysisNode[],
+): ClockSnapshot => {
+    if (replay.baseSeconds <= 0) {
+        return {
+            whiteRemainingMs: null,
+            blackRemainingMs: null,
+        };
+    }
+
+    let whiteRemainingMs = replay.baseSeconds * 1000;
+    let blackRemainingMs = replay.baseSeconds * 1000;
+
+    for (const node of path) {
+        if (
+            node.ply === 0 ||
+            node.moverClockAfterMs === null
+        ) {
+            continue;
+        }
+
+        if (node.ply % 2 === 1) {
+            whiteRemainingMs = node.moverClockAfterMs;
+        } else {
+            blackRemainingMs = node.moverClockAfterMs;
+        }
+    }
+
+    return {
+        whiteRemainingMs,
+        blackRemainingMs,
+    };
+};
+
+const getOpponentColor = (
+    playerColor: PieceColor,
+): PieceColor => {
+    return playerColor === 'WHITE'
+        ? 'BLACK'
+        : 'WHITE';
+};
 
 const formatGameResult = (
-    gameResult: GameResult,
+    result: GameResult,
 ): string => {
-    const label = GAME_STATUS_LABELS[gameResult.status];
+    const label = GAME_STATUS_LABELS[result.status];
 
-    if (gameResult.winner) {
-        return `${gameResult.winner} won · ${label}`;
+    if (result.winner === 'WHITE') {
+        return `White wins · ${label}`;
+    }
+
+    if (result.winner === 'BLACK') {
+        return `Black wins · ${label}`;
     }
 
     return label;
@@ -39,6 +122,7 @@ export const GameAnalysisPage: React.FC = () => {
         tree,
         workspace,
         selectedNode,
+        selectedPath,
         isAnalyzing,
         analysisError,
         boardResetVersion,
@@ -46,9 +130,9 @@ export const GameAnalysisPage: React.FC = () => {
         analyzeSelectedMove,
     } = useGameAnalysis(gameId ?? null);
 
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
     // Loading
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
 
     if (status === 'loading') {
         return (
@@ -75,9 +159,9 @@ export const GameAnalysisPage: React.FC = () => {
         );
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
     // Error
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
 
     if (status === 'error' || !replay || !tree || !workspace) {
         return (
@@ -122,32 +206,103 @@ export const GameAnalysisPage: React.FC = () => {
         return null;
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
     // Current analysis position
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------
 
     const boardState = createAnalysisViewState(
         replay,
         workspace,
+        user?.id ?? '',
     );
+
+    const playerColor = replay.playerColor;
+    const opponentColor = getOpponentColor(playerColor);
+
+    const playerName = getDisplayName(user);
+    const opponentName = replay.opponent.username || 'Opponent';
+
+    const playerAvatarUrl = getAvatarUrl(user);
+    const opponentAvatarUrl = replay.opponent.avatarUrl;
+
+    // Captured pieces.
+    const playerCapturedPieces = getPiecesCapturedBy(
+        playerColor,
+        boardState.capturedWhitePieces,
+        boardState.capturedBlackPieces,
+    );
+
+    const opponentCapturedPieces = getPiecesCapturedBy(
+        opponentColor,
+        boardState.capturedWhitePieces,
+        boardState.capturedBlackPieces,
+    );
+
+    // Material advantage.
+    const playerMaterialAdvantage = getMaterialAdvantage(
+        playerColor,
+        boardState.capturedWhitePieces,
+        boardState.capturedBlackPieces,
+    );
+
+    const opponentMaterialAdvantage = getMaterialAdvantage(
+        opponentColor,
+        boardState.capturedWhitePieces,
+        boardState.capturedBlackPieces,
+    );
+
+    // Static clock snapshot for the selected path.
+    const clockSnapshot = getClockSnapshot(
+        replay,
+        selectedPath,
+    );
+
+    const playerRemainingMs =
+        playerColor === 'WHITE'
+            ? clockSnapshot.whiteRemainingMs
+            : clockSnapshot.blackRemainingMs;
+
+    const opponentRemainingMs =
+        opponentColor === 'WHITE'
+            ? clockSnapshot.whiteRemainingMs
+            : clockSnapshot.blackRemainingMs;
+
+    const isPositionFinished =
+        selectedNode.gameResult.status !== 'IN_PROGRESS';
+
+    // ---------------------------------------------------------------------
+    // Render
+    // ---------------------------------------------------------------------
+
     return (
-        <div className="min-h-dvh bg-slate-950 text-white">
+        <div className="
+            min-h-dvh bg-slate-950 text-white
+            min-[951px]:h-dvh min-[951px]:overflow-hidden
+        ">
             <AppHeader
                 user={user}
                 onLogout={logout}
             />
 
             <main className="
-                mx-auto max-w-[1500px]
-                px-3 py-6 sm:px-6 sm:py-8
+                min-h-[calc(100dvh-4rem)]
+                px-3 py-2 sm:px-6 sm:py-3
+                min-[951px]:h-[calc(100dvh-4rem)]
+                min-[951px]:min-h-0
+                min-[951px]:overflow-hidden
             ">
-                {/* Page heading */}
-                <section className="
-                    mb-6 flex flex-col
-                    gap-4 sm:flex-row
-                    sm:items-end sm:justify-between
+                <div className="
+                    mx-auto flex min-h-[calc(100dvh-5rem)]
+                    max-w-[1600px] flex-col
+                    min-[951px]:h-full
+                    min-[951px]:min-h-0
                 ">
-                    <div>
+                    {/* Small analysis header */}
+                    <div className="
+                        mb-2 flex shrink-0
+                        flex-wrap items-center
+                        justify-between gap-2
+                    ">
                         <Link
                             to="/history"
                             className="
@@ -159,190 +314,236 @@ export const GameAnalysisPage: React.FC = () => {
                             ← Back to game history
                         </Link>
 
-                        <h1 className="
-                            mt-3 text-2xl font-bold
-                            tracking-tight text-white
-                            sm:text-3xl
-                        ">
-                            Game analysis
-                        </h1>
-
-                        <p className="mt-2 text-sm text-slate-400">
-                            Review the original game and explore alternative moves.
-                        </p>
-                    </div>
-
-                    <div className="
-                        flex flex-wrap items-center gap-2
-                    ">
-                        <span className="
-                            rounded-lg border border-slate-700
-                            bg-slate-900 px-3 py-2
-                            text-xs font-medium text-slate-300
-                        ">
-                            {formatTimeControl(
-                                replay.baseSeconds,
-                                replay.incrementSeconds,
-                            )}
-                        </span>
-
-                        <span className="
-                            rounded-lg border border-slate-700
-                            bg-slate-900 px-3 py-2
-                            text-xs font-medium text-slate-300
-                        ">
-                            {replay.plyCount} plies
-                        </span>
-
-                        <span className="
-                            rounded-lg border border-slate-700
-                            bg-slate-900 px-3 py-2
-                            text-xs font-medium text-slate-300
-                        ">
-                            {formatGameResult(
-                                replay.gameResult
-                            )}
-                        </span>
-                    </div>
-                </section>
-
-                {/* Analysis layout */}
-                <div className="
-                    grid items-start gap-5
-                    lg:grid-cols-[minmax(0,1fr)_360px]
-                ">
-                    {/* Board */}
-                    <section className="
-                        min-w-0 rounded-2xl
-                        border border-slate-800
-                        bg-slate-900/50 p-3
-                        sm:p-5
-                    ">
                         <div className="
-                            mb-4 flex items-center
-                            justify-between gap-3
+                            flex flex-wrap items-center
+                            gap-2 text-[10px] text-slate-500
                         ">
-                            <div>
-                                <p className="
-                                    text-xs font-semibold
-                                    uppercase tracking-wider
-                                    text-emerald-300
-                                ">
-                                    Analysis board
-                                </p>
+                            <span>
+                                {formatTimeControl(
+                                    replay.baseSeconds,
+                                    replay.incrementSeconds,
+                                )}
+                            </span>
 
-                                <p className="
-                                    mt-1 text-sm text-slate-400
-                                ">
-                                    {selectedNode.ply === 0
-                                        ? 'Initial position'
-                                        : `Ply ${selectedNode.ply}`
-                                    }
-                                    {' · '}
-                                    {boardState.currentTurn === 'WHITE'
-                                        ? 'White to move'
-                                        : 'Black to move'
-                                    }
-                                </p>
-                            </div>
+                            <span>·</span>
 
-                            {isAnalyzing && (
-                                <span className="
-                                    inline-flex items-center
-                                    gap-2 text-xs
-                                    text-amber-300
-                                ">
-                                    <span className="
-                                        h-3 w-3 animate-spin
-                                        rounded-full border-2
-                                        border-amber-300/30
-                                        border-t-amber-300
-                                    "/>
-                                    Analyzing...
-                                </span>
-                            )}
+                            <span>{replay.plyCount} plies</span>
+
+                            <span>·</span>
+
+                            <span>
+                                Original result: {formatGameResult(replay.gameResult)}
+                            </span>
                         </div>
+                    </div>
 
-                        <div className="mx-auto w-full max-w-[720px]">
-                            <ChessBoard
-                                key={[
-                                    selectedNode.id,
-                                    boardResetVersion,
-                                ].join(':')}
-                                game={boardState}
-                                moveIndex={selectedNode.ply}
-                                playerColor="WHITE"
-                                isConnected={!isAnalyzing}
-                                allowAnySide
-                                onMove={analyzeSelectedMove}
+                    {/* Same three-column structure as GamePage */}
+                    <section className="
+                        mx-auto grid w-full
+                        max-w-[min(100%,820px,calc(100dvh_-_330px))]
+                        grid-cols-1 gap-2
+
+                        min-[951px]:max-w-[1100px]
+                        min-[951px]:min-h-0
+                        min-[951px]:flex-1
+                        min-[951px]:grid-cols-[180px_minmax(0,1fr)_clamp(160px,calc(100vw_-_1060px),320px)]
+                        min-[951px]:grid-rows-[minmax(0,1fr)]
+                        min-[951px]:gap-3
+                    ">
+                        {/* MOBILE: Opponent */}
+                        <div className="
+                            flex h-10 w-full min-w-0
+                            items-center gap-2
+                            min-[951px]:hidden
+                        ">
+                            <GamePlayerCard
+                                name={`${opponentName} · ${opponentColor}`}
+                                avatarUrl={opponentAvatarUrl}
+                                capturedPieces={opponentCapturedPieces}
+                                materialAdvantage={opponentMaterialAdvantage}
+                                className="flex-1"
+                            />
+
+                            <GameClock
+                                label="Opponent"
+                                remainingMs={opponentRemainingMs}
+                                turnStartTimeEpochMs={0}
+                                serverTimeEpochMs={0}
+                                isActive={false}
                             />
                         </div>
 
+                        {/* DESKTOP: Player column */}
                         <div className="
-                            mt-4 rounded-xl
-                            border border-slate-800
-                            bg-slate-950/60 p-3
+                            hidden min-w-0
+                            min-[951px]:col-start-1
+                            min-[951px]:row-start-1
+                            min-[951px]:flex
+                            min-[951px]:h-full
+                            min-[951px]:min-h-0
+                            min-[951px]:flex-col
+                            min-[951px]:items-stretch
+                            min-[951px]:py-2
                         ">
-                            <p className="text-xs leading-5 text-slate-400">
-                                Select a piece and destination square to
-                                analyze an alternative move. The original
-                                game history will remain unchanged.
-                            </p>
+                            <GamePlayerCard
+                                name={`${opponentName} · ${opponentColor}`}
+                                avatarUrl={opponentAvatarUrl}
+                                capturedPieces={opponentCapturedPieces}
+                                materialAdvantage={opponentMaterialAdvantage}
+                            />
+
+                            <div className="
+                                flex min-h-0 flex-1
+                                flex-col items-center
+                                justify-center gap-3
+                            ">
+                                <GameClock
+                                    label="Opponent"
+                                    remainingMs={opponentRemainingMs}
+                                    turnStartTimeEpochMs={0}
+                                    serverTimeEpochMs={0}
+                                    isActive={false}
+                                />
+
+                                <GameClock
+                                    label="You"
+                                    remainingMs={playerRemainingMs}
+                                    turnStartTimeEpochMs={0}
+                                    serverTimeEpochMs={0}
+                                    isActive={false}
+                                />
+                            </div>
+
+                            <GamePlayerCard
+                                name={`${playerName} · ${playerColor}`}
+                                avatarUrl={playerAvatarUrl}
+                                capturedPieces={playerCapturedPieces}
+                                materialAdvantage={playerMaterialAdvantage}
+                            />
                         </div>
 
-                        {analysisError && (
-                            <div className="
-                                mt-3 rounded-xl
-                                border border-rose-500/20
-                                bg-rose-500/5 p-3
-                            ">
-                                <p className="text-sm text-rose-300">
-                                    {analysisError}
-                                </p>
+                        {/* Chess board */}
+                        <div className="
+                            flex min-w-0 justify-center
+                            min-[951px]:col-start-2
+                            min-[951px]:row-start-1
+                            min-[951px]:min-h-0
+                            min-[951px]:items-center
+                            min-[951px]:overflow-hidden
+                        ">
+                            <div className="w-full min-w-0">
+                                <ChessBoard
+                                    key={[
+                                        selectedNode.id,
+                                        boardResetVersion,
+                                    ].join(':')}
+                                    game={boardState}
+                                    moveIndex={selectedNode.ply}
+                                    playerColor={playerColor}
+                                    isConnected={
+                                        !isAnalyzing &&
+                                        !isPositionFinished
+                                    }
+                                    allowAnySide
+                                    onMove={analyzeSelectedMove}
+                                />
+
+                                {/* Terminal position */}
+                                {isPositionFinished && (
+                                    <div
+                                        role="status"
+                                        className="
+                                            mt-3 rounded-xl
+                                            border border-amber-400/20
+                                            bg-amber-400/5 p-3
+                                        "
+                                    >
+                                        <p className="
+                                            text-sm font-semibold
+                                            text-amber-300
+                                        ">
+                                            {formatGameResult(
+                                                selectedNode.gameResult,
+                                            )}
+                                        </p>
+
+                                        <p className="
+                                            mt-1 text-xs leading-5
+                                            text-slate-400
+                                        ">
+                                            {getGameResultDescription(
+                                                selectedNode.gameResult.status,
+                                            )}
+                                            {' '}
+                                            No further variations can be
+                                            created from this position.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {analysisError && (
+                                    <div className="
+                                        mt-3 rounded-xl
+                                        border border-rose-500/20
+                                        bg-rose-500/5 p-3
+                                    ">
+                                        <p className="text-xs text-rose-300">
+                                            {analysisError}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {isAnalyzing && (
+                                    <p className="
+                                        mt-2 text-center
+                                        text-xs text-amber-300
+                                    ">
+                                        Analyzing move...
+                                    </p>
+                                )}
                             </div>
-                        )}
+                        </div>
+
+                        {/* MOBILE: Current player */}
+                        <div className="
+                            flex h-10 w-full min-w-0
+                            items-center gap-2
+                            min-[951px]:hidden
+                        ">
+                            <GamePlayerCard
+                                name={`${playerName} · ${playerColor}`}
+                                avatarUrl={playerAvatarUrl}
+                                capturedPieces={playerCapturedPieces}
+                                materialAdvantage={playerMaterialAdvantage}
+                                className="flex-1"
+                            />
+
+                            <GameClock
+                                label="You"
+                                remainingMs={playerRemainingMs}
+                                turnStartTimeEpochMs={0}
+                                serverTimeEpochMs={0}
+                                isActive={false}
+                            />
+                        </div>
+
+                        {/* Analysis move history */}
+                        <div className="
+                            min-w-0
+                            min-[951px]:col-start-3
+                            min-[951px]:row-start-1
+                            min-[951px]:min-h-0
+                        ">
+                            <AnalysisMoveHistoryPanel
+                                tree={tree}
+                                selectedNodeId={workspace.selectedNodeId}
+                                fullMoveNumber={boardState.fullMoveNumber}
+                                isAnalyzing={isAnalyzing}
+                                onSelectNode={selectNode}
+                            />
+                        </div>
                     </section>
-
-                    {/* Move tree */}
-                    <AnalysisMoveTree
-                        tree={tree}
-                        selectedNodeId={workspace.selectedNodeId}
-                        isAnalyzing={isAnalyzing}
-                        onSelectNode={selectNode}
-                    />
                 </div>
-
-                {/* Original game information */}
-                <section className="
-                    mt-5 grid gap-3
-                    sm:grid-cols-2
-                ">
-                    <div className="
-                        rounded-xl border border-slate-800
-                        bg-slate-900/50 p-4
-                    ">
-                        <p className="text-xs text-slate-500">
-                            White player
-                        </p>
-
-                        <p className="mt-1 break-all text-sm text-slate-200">
-                            {replay.whitePlayerId}
-                        </p>
-                    </div>
-
-                    <div className="
-                        rounded-xl border border-slate-800
-                        bg-slate-900/50 p-4
-                    ">
-                        <p className="text-xs text-slate-500">
-                            Black player
-                        </p>
-
-                        <p className="mt-1 break-all text-sm text-slate-200">
-                            {replay.blackPlayerId}
-                        </p>
-                    </div>
-                </section>
             </main>
         </div>
     );

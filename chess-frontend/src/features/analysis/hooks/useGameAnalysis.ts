@@ -298,9 +298,57 @@ export const useGameAnalysis = (
             return false;
         }
 
-        // Guard against invalid board actions.
+// Do not continue from a terminal position.
+        if (parentNode.gameResult.status !== 'IN_PROGRESS') {
+            return false;
+        }
+
+// Guard against invalid board actions.
         if (!parentNode.legalMoves[from]?.includes(to)) {
             return false;
+        }
+
+// Convert promotion to UCI suffix.
+        const promotionSuffix: Record<PromotionPieceType, string> = {
+            QUEEN: 'q',
+            ROOK: 'r',
+            BISHOP: 'b',
+            KNIGHT: 'n',
+        };
+
+        const uciMove = `${from}${to}${
+            promotionType
+                ? promotionSuffix[promotionType]
+                : ''
+        }`;
+
+// Reuse an existing child before making an API request.
+        const existingChildId = parentNode.childIds.find(
+            (childId) =>
+                readyState.workspace.tree.nodes[childId]?.move === uciMove,
+        );
+
+        if (existingChildId) {
+            setPageState((current) => {
+                if (
+                    current.status !== 'ready' ||
+                    current.gameId !== gameId ||
+                    current.isAnalyzing
+                ) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    workspace: {
+                        ...current.workspace,
+                        selectedNodeId: existingChildId,
+                    },
+                    analysisError: null,
+                };
+            });
+
+            return true;
         }
 
         const request: AnalyzeMoveRequest = {

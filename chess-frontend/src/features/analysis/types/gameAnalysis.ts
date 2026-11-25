@@ -1,7 +1,12 @@
 import type {
     GameResult,
+    PieceColor,
     PromotionPieceType,
 } from '../../game/types/game';
+
+import type {
+    PlayerSummary,
+} from '../../gamehistory/types/gameHistory';
 
 export interface GameReplayRecordDto {
     /**
@@ -20,8 +25,8 @@ export interface GameReplayRecordDto {
 export interface GameReplayDto {
     gameId: string;
 
-    whitePlayerId: string;
-    blackPlayerId: string;
+    opponent: PlayerSummary;
+    playerColor: PieceColor;
 
     gameResult: GameResult;
 
@@ -49,9 +54,6 @@ export interface AnalyzeMoveRequest {
 export interface GameAnalysisDto {
     gameResult: GameResult;
 
-    /**
-     * UCI move returned by backend.
-     */
     move: string;
 
     fen: string;

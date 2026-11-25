@@ -13,11 +13,12 @@ import type {
 
 import {parseFen} from '../../game/utils/fen';
 import {getAnalysisPath} from './analysisTree';
-import {toCapturedPieceDto} from "../../game/utils/gameState.ts";
+import {toCapturedPieceDto} from '../../game/utils/gameState';
 
 export const createAnalysisViewState = (
     replay: GameReplayDto,
     workspace: AnalysisWorkspace,
+    currentPlayerId: string,
 ): GameViewState => {
     const path = getAnalysisPath(
         workspace.tree,
@@ -25,7 +26,9 @@ export const createAnalysisViewState = (
     );
 
     if (path.length === 0) {
-        throw new Error('Unable to build the selected analysis position.');
+        throw new Error(
+            'Unable to build the selected analysis position.',
+        );
     }
 
     const selectedNode = path[path.length - 1];
@@ -64,15 +67,23 @@ export const createAnalysisViewState = (
         }];
     });
 
+    // Backend trả màu của người đang đăng nhập.
+    // Từ đó suy ra hai player ID cho GameViewState.
+    const whitePlayerId =
+        replay.playerColor === 'WHITE'
+            ? currentPlayerId
+            : replay.opponent.playerId;
+
+    const blackPlayerId =
+        replay.playerColor === 'BLACK'
+            ? currentPlayerId
+            : replay.opponent.playerId;
+
     return {
         gameId: replay.gameId,
 
-        // Analysis can continue from a resigned or timed-out position.
-        // The actual legal moves still come from the chess engine.
-        gameResult: {
-            status: 'IN_PROGRESS',
-            winner: null,
-        },
+        // Kết quả phụ thuộc vào node đang xem.
+        gameResult: selectedNode.gameResult,
 
         currentTurn: position.currentTurn,
         inCheck: selectedNode.inCheck,
@@ -88,14 +99,14 @@ export const createAnalysisViewState = (
 
         createdAt: replay.startedAt,
 
-        // Analysis does not run the original game clocks.
+        // Analysis clock không đếm ngược.
         whiteRemainingMs: null,
         blackRemainingMs: null,
         turnStartTimeEpochMs: null,
         serverTimeEpochMs: 0,
 
-        whitePlayerId: replay.whitePlayerId,
-        blackPlayerId: replay.blackPlayerId,
+        whitePlayerId,
+        blackPlayerId,
 
         drawOfferedBy: null,
         stateVersion: selectedNode.ply,
