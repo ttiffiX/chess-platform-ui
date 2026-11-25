@@ -10,24 +10,12 @@ export interface AnalysisMoveLineItem {
 
 export type AnalysisMoveLine = AnalysisMoveLineItem[];
 
-/**
- * Dựng một line bằng cách đi theo childIds[0].
- *
- * Tại mỗi vị trí tiếp diễn, các child còn lại
- * được dựng thành những variation nằm dưới nước đi chính.
- *
- * includeAlternativesAtFirst:
- * - true: lấy cả các nhánh thay thế của nước đầu tiên.
- * - false: bỏ qua sibling của nước đầu tiên vì chúng
- *   đã được hiển thị ở cấp cha.
- */
 export const buildAnalysisMoveLine = (
     tree: AnalysisTree,
     firstNodeId: string,
     includeAlternativesAtFirst = true,
 ): AnalysisMoveLine => {
     const line: AnalysisMoveLine = [];
-
     const visited = new Set<string>();
 
     let current: AnalysisNode | undefined =
@@ -40,44 +28,52 @@ export const buildAnalysisMoveLine = (
 
     let isFirstNode = true;
 
-    while (current && !visited.has(current.id)) {
-        visited.add(current.id);
+    while (current !== undefined && !visited.has(current.id)) {
+        // Giữ reference ổn định trong vòng lặp.
+        const currentNode: AnalysisNode = current;
 
-        const shouldBuildAlternatives =
+        visited.add(currentNode.id);
+
+        let alternativeIds: string[] = [];
+
+        if (
             parent !== undefined &&
-            (!isFirstNode || includeAlternativesAtFirst);
-
-        const alternativeIds = shouldBuildAlternatives
-            ? parent.childIds.filter(
-                (childId) => childId !== current.id,
-            )
-            : [];
-
-        const variations = alternativeIds.flatMap((alternativeId) => {
-            const variationLine = buildAnalysisMoveLine(
-                tree,
-                alternativeId,
-                false,
+            (!isFirstNode || includeAlternativesAtFirst)
+        ) {
+            alternativeIds = parent.childIds.filter(
+                (childId) => childId !== currentNode.id,
             );
+        }
 
-            return variationLine.length > 0
-                ? [variationLine]
-                : [];
-        });
+        const variations = alternativeIds.flatMap(
+            (alternativeId) => {
+                const variationLine = buildAnalysisMoveLine(
+                    tree,
+                    alternativeId,
+                    false,
+                );
+
+                return variationLine.length > 0
+                    ? [variationLine]
+                    : [];
+            },
+        );
 
         line.push({
-            node: current,
+            node: currentNode,
             variations,
         });
 
-        // Child đầu tiên là nước tiếp diễn của line hiện tại.
-        const nextNodeId = current.childIds[0];
+        const nextNodeId: string | undefined =
+            currentNode.childIds[0];
 
-        parent = current;
+        const nextNode: AnalysisNode | undefined =
+            nextNodeId !== undefined
+                ? tree.nodes[nextNodeId]
+                : undefined;
 
-        current = nextNodeId
-            ? tree.nodes[nextNodeId]
-            : undefined;
+        parent = currentNode;
+        current = nextNode;
 
         isFirstNode = false;
     }
