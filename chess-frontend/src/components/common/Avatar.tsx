@@ -1,9 +1,10 @@
-import React from 'react';
-import { getInitials } from '../../utils/user';
+import React, {useState} from 'react';
+import {getInitials} from '../../utils/user';
 
 interface AvatarProps {
     name: string;
     size?: 'sm' | 'md' | 'lg';
+    src?: string | null;
 }
 
 const sizeClasses = {
@@ -12,8 +13,25 @@ const sizeClasses = {
     lg: 'h-12 w-12 text-sm',
 };
 
-export const Avatar: React.FC<AvatarProps> = ({name, size = 'md',}) => {
+export const Avatar: React.FC<AvatarProps> = ({name, size = 'md', src}) => {
+    const [failedSrc, setFailedSrc] = useState<string | null>(null);
     const initials = getInitials(name);
+
+    const trimmedSrc = src?.trim() ?? '';
+    const hasValidSrc = trimmedSrc.length > 0 && failedSrc !== trimmedSrc;
+
+    if (hasValidSrc) {
+        return (
+            <img
+                src={trimmedSrc}
+                alt={name}
+                title={name}
+                referrerPolicy="no-referrer"
+                onError={() => setFailedSrc(trimmedSrc)}
+                className={`shrink-0 rounded-full border border-slate-700 object-cover ${sizeClasses[size]}`}
+            />
+        );
+    }
 
     return (
         <div

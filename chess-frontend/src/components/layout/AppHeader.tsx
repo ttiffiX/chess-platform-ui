@@ -2,7 +2,7 @@ import React from 'react';
 import {Link, NavLink} from 'react-router-dom';
 
 import type {UserInfo} from '../../types/user';
-import {getDisplayName} from '../../utils/user';
+import {getAvatarUrl, getDisplayName} from '../../utils/user';
 import {Avatar} from '../common/Avatar';
 
 interface AppHeaderProps {
@@ -15,6 +15,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                                         onLogout,
                                                     }) => {
     const displayName = getDisplayName(user);
+    const avatarUrl = getAvatarUrl(user);
 
     return (
         <header className="
@@ -62,6 +63,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     >
                         Home
                     </NavLink>
+                    <NavLink
+                        to="/history"
+                        end
+                        className={({isActive}) =>
+                            `rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                                isActive
+                                    ? 'bg-slate-800 text-white'
+                                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                            }`
+                        }
+                    >
+                        History
+                    </NavLink>
                 </nav>
 
                 {/* User information and logout */}
@@ -76,7 +90,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         </p>
                     </div>
 
-                    <Avatar name={displayName}/>
+                    <Avatar
+                        name={displayName}
+                        src={avatarUrl}
+                        size="lg"
+                    />
 
                     <button
                         type="button"

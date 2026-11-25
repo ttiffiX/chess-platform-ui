@@ -7,6 +7,7 @@ import {HomePage} from '../features/home/pages/HomePage';
 import {GamePage} from '../features/game/pages/GamePage';
 
 import {useAuth} from '../features/auth/hooks/useAuth';
+import {GameHistoryPage} from "../features/gamehistory/pages/GameHistoryPage.tsx";
 
 const LoadingPage: React.FC = () => (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
@@ -87,6 +88,15 @@ export const AppRoutes: React.FC = () => {
                 element={
                     <ProtectedRoute>
                         <GamePage/>
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/history"
+                element={
+                    <ProtectedRoute>
+                        <GameHistoryPage/>
                     </ProtectedRoute>
                 }
             />

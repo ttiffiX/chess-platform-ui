@@ -1,7 +1,7 @@
 import type {UserInfo} from '../types/user';
 
 export const getDisplayName = (user: UserInfo | null): string => {
-    return user?.name?.trim() || user?.email?.split('@')[0] || 'Player';
+    return user?.name?.trim() || 'Player';
 };
 
 export const getInitials = (name: string): string => {
@@ -13,3 +13,7 @@ export const getInitials = (name: string): string => {
         .map((part) => part.charAt(0).toUpperCase())
         .join('');
 };
+
+export const getAvatarUrl = (user: UserInfo | null): string | null => {
+    return user?.picture || null;
+}
