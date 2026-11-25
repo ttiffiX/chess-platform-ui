@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 
 import {Link, useParams} from 'react-router-dom';
 
@@ -15,6 +15,8 @@ import {AnalysisMoveHistoryPanel} from '../components/AnalysisMoveHistoryPanel';
 import {useGameAnalysis} from '../hooks/useGameAnalysis';
 
 import {createAnalysisViewState} from '../utils/analysisView';
+
+import {useToast} from '../../../shared/notifications/hooks/useToast';
 
 import {
     getPiecesCapturedBy,
@@ -113,6 +115,7 @@ export const GameAnalysisPage: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
 
     const {user, logout} = useAuth();
+    const {showError} = useToast();
 
     const {
         status,
@@ -128,6 +131,12 @@ export const GameAnalysisPage: React.FC = () => {
         selectNode,
         analyzeSelectedMove,
     } = useGameAnalysis(gameId ?? null);
+
+    useEffect(() => {
+        if (analysisError) {
+            showError(analysisError);
+        }
+    }, [analysisError, showError]);
 
     // ---------------------------------------------------------------------
     // Loading
@@ -356,7 +365,7 @@ export const GameAnalysisPage: React.FC = () => {
                             min-[951px]:hidden
                         ">
                             <GamePlayerCard
-                                name={`${opponentName} · ${opponentColor}`}
+                                name={`${opponentName}`}
                                 avatarUrl={opponentAvatarUrl}
                                 capturedPieces={opponentCapturedPieces}
                                 materialAdvantage={opponentMaterialAdvantage}
@@ -385,7 +394,7 @@ export const GameAnalysisPage: React.FC = () => {
                             min-[951px]:py-2
                         ">
                             <GamePlayerCard
-                                name={`${opponentName} · ${opponentColor}`}
+                                name={`${opponentName}`}
                                 avatarUrl={opponentAvatarUrl}
                                 capturedPieces={opponentCapturedPieces}
                                 materialAdvantage={opponentMaterialAdvantage}
@@ -414,7 +423,7 @@ export const GameAnalysisPage: React.FC = () => {
                             </div>
 
                             <GamePlayerCard
-                                name={`${playerName} · ${playerColor}`}
+                                name={`${playerName}`}
                                 avatarUrl={playerAvatarUrl}
                                 capturedPieces={playerCapturedPieces}
                                 materialAdvantage={playerMaterialAdvantage}
@@ -447,26 +456,6 @@ export const GameAnalysisPage: React.FC = () => {
                                     onMove={analyzeSelectedMove}
                                 />
 
-                                {analysisError && (
-                                    <div className="
-                                        mt-3 rounded-xl
-                                        border border-rose-500/20
-                                        bg-rose-500/5 p-3
-                                    ">
-                                        <p className="text-xs text-rose-300">
-                                            {analysisError}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {isAnalyzing && (
-                                    <p className="
-                                        mt-2 text-center
-                                        text-xs text-amber-300
-                                    ">
-                                        Analyzing move...
-                                    </p>
-                                )}
                             </div>
                         </div>
 
@@ -477,7 +466,7 @@ export const GameAnalysisPage: React.FC = () => {
                             min-[951px]:hidden
                         ">
                             <GamePlayerCard
-                                name={`${playerName} · ${playerColor}`}
+                                name={`${playerName}`}
                                 avatarUrl={playerAvatarUrl}
                                 capturedPieces={playerCapturedPieces}
                                 materialAdvantage={playerMaterialAdvantage}
