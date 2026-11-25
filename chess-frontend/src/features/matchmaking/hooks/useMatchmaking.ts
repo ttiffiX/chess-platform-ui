@@ -136,7 +136,6 @@ export const useMatchmaking = (
         };
 
         const client = createMatchmakingSocket({
-            accessToken,
             handlers: {
                 onConnected: (connectedClient) => {
                     if (

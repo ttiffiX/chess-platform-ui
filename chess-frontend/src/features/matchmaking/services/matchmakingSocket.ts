@@ -10,6 +10,8 @@ import type {
     MatchmakingPreset,
 } from '../types/matchmaking';
 
+import {getFreshAccessToken} from '../../../api/client';
+
 interface MatchmakingSocketHandlers {
     onConnected: (client: Client) => void;
     onStatus: (status: MatchStatusEvent) => void;
@@ -19,7 +21,6 @@ interface MatchmakingSocketHandlers {
 }
 
 interface CreateMatchmakingSocketParams {
-    accessToken: string;
     handlers: MatchmakingSocketHandlers;
 }
 
@@ -58,15 +59,34 @@ const parseMatchFound = (
 };
 
 export const createMatchmakingSocket = ({
-                                            accessToken,
                                             handlers,
                                         }: CreateMatchmakingSocketParams): Client => {
     const client = new Client({
         webSocketFactory: () =>
             new SockJS(WS_BASE_URL) as unknown as WebSocket,
 
-        connectHeaders: {
-            Authorization: `Bearer ${accessToken}`,
+        connectHeaders: {},
+
+        // Luôn lấy access token còn hạn trước khi STOMP CONNECT.
+        beforeConnect: async () => {
+            try {
+                const freshAccessToken = await getFreshAccessToken();
+
+                if (!freshAccessToken) {
+                    handlers.onError(
+                        'Your session has expired. Please sign in again.',
+                    );
+                    return;
+                }
+
+                client.connectHeaders = {
+                    Authorization: `Bearer ${freshAccessToken}`,
+                };
+            } catch {
+                handlers.onError(
+                    'Unable to renew your session. Please try again.',
+                );
+            }
         },
 
         reconnectDelay: 0,
@@ -95,7 +115,6 @@ export const createMatchmakingSocket = ({
                 }
             });
 
-            // Subscribe to user-specific WebSocket errors.
             client.subscribe('/user/queue/errors', (message) => {
                 const errorMessage = parseWebSocketError(message.body);
 
