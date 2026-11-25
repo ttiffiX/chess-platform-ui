@@ -250,6 +250,7 @@ export const GamePage: React.FC = () => {
         enabled: Boolean(
             game &&
             game.gameId === gameId &&
+            game.gameResult.status === 'IN_PROGRESS' &&
             accessToken
         ),
         onGameMessage: handleGameMessage,
