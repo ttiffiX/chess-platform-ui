@@ -23,7 +23,6 @@ import {
 
 import {
     GAME_STATUS_LABELS,
-    getGameResultDescription,
 } from '../../game/utils/gameResult';
 
 import {
@@ -447,39 +446,6 @@ export const GameAnalysisPage: React.FC = () => {
                                     allowAnySide
                                     onMove={analyzeSelectedMove}
                                 />
-
-                                {/* Terminal position */}
-                                {isPositionFinished && (
-                                    <div
-                                        role="status"
-                                        className="
-                                            mt-3 rounded-xl
-                                            border border-amber-400/20
-                                            bg-amber-400/5 p-3
-                                        "
-                                    >
-                                        <p className="
-                                            text-sm font-semibold
-                                            text-amber-300
-                                        ">
-                                            {formatGameResult(
-                                                selectedNode.gameResult,
-                                            )}
-                                        </p>
-
-                                        <p className="
-                                            mt-1 text-xs leading-5
-                                            text-slate-400
-                                        ">
-                                            {getGameResultDescription(
-                                                selectedNode.gameResult.status,
-                                            )}
-                                            {' '}
-                                            No further variations can be
-                                            created from this position.
-                                        </p>
-                                    </div>
-                                )}
 
                                 {analysisError && (
                                     <div className="
